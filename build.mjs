@@ -2,7 +2,7 @@
 // browser no longer downloads Babel and compiles ~700 KB of JSX on every page load.
 //   npm run build   — build once        npm run watch — rebuild on every save
 import { transform } from "esbuild";
-import { readFile, writeFile, mkdir, watch } from "node:fs/promises";
+import { readFile, writeFile, mkdir, watch, rm, cp } from "node:fs/promises";
 import { createHash } from "node:crypto";
 
 // Same order the scripts used to load in — later files use names earlier ones define.
@@ -34,6 +34,16 @@ async function build() {
 }
 
 try { await build(); } catch (e) { console.error(e.message); process.exitCode = 1; }
+
+// Hosting (e.g. Vercel): `node build.mjs --out public` copies the finished site into one folder.
+const outIx = process.argv.indexOf("--out");
+if (outIx > -1 && !process.exitCode) {
+  const out = process.argv[outIx + 1] || "public";
+  await rm(out, { recursive: true, force: true });
+  await mkdir(out, { recursive: true });
+  for (const f of ["index.html", "CliniPackPrototype.html", "css", "assets", "dist"]) await cp(f, `${out}/${f}`, { recursive: true });
+  console.log(`site copied to ${out}/`);
+}
 if (process.argv.includes("--watch")) {
   console.log("watching js/ …");
   let timer;

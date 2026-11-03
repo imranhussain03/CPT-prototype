@@ -26,6 +26,10 @@ npm run watch     # rebuild automatically on every save
 
 The build also updates the `?v=` stamp on `dist/app.js` in `index.html`, so a normal refresh picks up the new version.
 
+## Hosting (Vercel)
+
+`vercel.json` runs `node build.mjs --out public`, which builds `dist/app.js` and copies the site (`index.html`, `css/`, `assets/`, `dist/`) into `public/`, the folder Vercel serves. `public/` is not committed.
+
 ## Links (hash router)
 
 Each page, request, tab and Setup section has its own link. The browser's Back and Forward buttons work, and you can share a link to an exact screen.
