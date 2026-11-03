@@ -446,6 +446,7 @@ function editTrackerOf(r){
 function VlDetail({req:r,me,onBack,onAct,procs=[],onOpenProc=()=>{},onReassign=()=>{}}){
   const[comment,setComment]=useState("");const[adminOpen,setAdminOpen]=useState(false);
   const[raOpen,setRaOpen]=useState(false);const[raUser,setRaUser]=useState(null);const[raWhy,setRaWhy]=useState("");
+  const[docOpen,setDocOpen]=useState(false);const[docType,setDocType]=useState(DOC_TYPES[0]);const[docWho,setDocWho]=useState(null);const[docNote,setDocNote]=useState("");
   if(!r||!r.id)return <div style={{maxWidth:1600}}><button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:T.textSec}}>← Back</button><Card style={{padding:30,textAlign:"center",color:T.textMut}}>Request not found.</Card></div>;
   const fin=r.kind==="fin";const chain=r.chain||[];
   const {stages,cur}=editTrackerOf(r);
@@ -458,13 +459,20 @@ function VlDetail({req:r,me,onBack,onAct,procs=[],onOpenProc=()=>{},onReassign=(
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><ST style={{fontSize:13,color:T.text,margin:0}}>{title}</ST><span style={{fontSize:10,color:T.textMut}}>Acting as {me.name}</span></div>
     <textarea style={{...inp,height:48,resize:"vertical",fontFamily:T.font,marginBottom:8}} placeholder="Comment (required to request modification or reject)..." value={comment} onChange={e=>setComment(e.target.value)}/>
     {curStep.coveredFor&&<div style={{fontSize:11,color:T.purple,marginBottom:8}}>↱ Covering for {curStep.coveredFor} — either of you may decide it.</div>}
+    {r.phase==="confirm"&&<div style={{fontSize:11.5,color:T.textSec,marginBottom:8}}>Confirming records the change in PrimeCare and applies it to the package — the new values are written and a new version is recorded.</div>}
     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-      <button onClick={()=>decide("approve")} style={{padding:"9px 20px",borderRadius:8,border:"none",background:T.ok,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>✓ {r.phase==="confirm"?"Confirm on PrimeCare & apply":fin&&r.stage===r.stages.length-1?"Acknowledge & apply":"Approve"} →</button>
+      <button onClick={()=>decide("approve")} style={{padding:"9px 20px",borderRadius:8,border:"none",background:T.ok,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>✓ {r.phase==="confirm"?"Confirm on PrimeCare & Apply":fin&&r.stage===r.stages.length-1?"Acknowledge & apply":"Approve"} →</button>
       <button onClick={()=>decide("reject")} style={{padding:"9px 18px",borderRadius:8,border:`1px solid ${T.err}`,background:"#fff",color:T.err,fontSize:12,fontWeight:600,cursor:"pointer"}}>✕ Reject</button>
       {r.phase!=="confirm"&&<button onClick={()=>decide("return")} style={{padding:"9px 18px",borderRadius:8,border:`1px solid ${T.warn}60`,background:"#fff",color:T.warn,fontSize:12,fontWeight:600,cursor:"pointer"}}>Request modification</button>}
+      <button onClick={()=>{setDocWho(docPeople.find(x=>x.tag)||docPeople[0]||null);setDocOpen(true);}} style={{padding:"9px 18px",borderRadius:8,border:`1px solid ${T.info}60`,background:"#fff",color:T.info,fontSize:12,fontWeight:600,cursor:"pointer"}}>Request document</button>
     </div>
     {admin&&<div style={{fontSize:10.5,color:T.textMut,marginTop:8}}>The decision is recorded in your name, not theirs.</div>}
   </Card>;
+  // people who can be asked for a document: everyone on this amendment except whoever the step is waiting on
+  const docPeople=(()=>{const seen=new Set([curStep.name]);const out=[];const add=(name,role)=>{if(!name||seen.has(name))return;seen.add(name);out.push({name,role});};
+    add(r.raisedBy,"Requestor");(fin?r.stages:chain).forEach(st=>add(st.name,st.short||st.label));
+    return out.map((x,i)=>({...x,tag:i===1?"SUGGESTED":null}));})();
+  const confirmName=(U.find(u=>u.role===(r.confirmRole==="FCD"?"cfo":"cscm"))||{}).name;
   const stepRow=(n,label,name,state,extra)=><div style={{display:"flex",alignItems:"center",gap:10,fontSize:12,padding:"7px 10px",borderRadius:6,background:state==="done"?"#f0fdf4":state==="cur"?"#fffbeb":"#f8fafc"}}>
     <span style={{width:22,height:22,borderRadius:"50%",background:state==="done"?T.ok:"#e2e8f0",color:state==="done"?"#fff":T.textMut,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,flexShrink:0}}>{state==="done"?"✓":n}</span>
     <span style={{fontWeight:700,color:T.text}}>{label}</span><span style={{color:T.textSec}}>— {name||"—"}</span>{extra}</div>;
@@ -477,7 +485,7 @@ function VlDetail({req:r,me,onBack,onAct,procs=[],onOpenProc=()=>{},onReassign=(
     <p style={{fontSize:12.5,color:T.textSec,margin:"4px 0 12px"}}>Base <a onClick={()=>onOpenProc(r.baseId)} style={{color:T.primary,fontWeight:700,cursor:"pointer"}}>{r.baseId}</a> · {r.cpt} · <strong>{editReqLabel(r)}</strong>{fin&&<span> · V{r.fromVer} → V{r.toVer}</span>} · raised by {r.raisedBy} on {fmtDate(r.date)}</p>
     {mine&&<div style={{display:"flex",alignItems:"center",gap:12,padding:"9px 14px",marginBottom:10,borderRadius:8,background:"#fff",border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.warn}`}}>
       <span style={{fontSize:9.5,fontWeight:800,letterSpacing:0.6,color:T.warn,background:T.warn+"18",padding:"3px 9px",borderRadius:12,whiteSpace:"nowrap"}}>ACTION REQUIRED · YOUR TURN</span>
-      <span style={{fontSize:12,color:T.text}}>{r.status==="returned"?"An approver asked for changes. Amend the request on the package and send it round again — nobody else can move it.":r.phase==="confirm"?"Make the change on PrimeCare, then confirm here — confirming applies it to the package as a new version.":"Review the requested change and the reason, then record your decision below."}</span></div>}
+      <span style={{fontSize:12,color:T.text}}>{r.status==="returned"?"An approver asked for changes. Amend the request on the package and send it round again — nobody else can move it.":r.phase==="confirm"?"Make the change on PrimeCare, then confirm here — confirming applies it to the package as a new version.":"Approve or reject this requested change — the decision is recorded in the bar at the bottom."}</span></div>}
     {adminCan&&<div style={{display:"flex",alignItems:"center",gap:12,padding:"9px 14px",marginBottom:10,borderRadius:8,background:"#fff",border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.warn}`}}>
       <span style={{fontSize:9.5,fontWeight:800,letterSpacing:0.6,color:"#b45309",background:"#fef3c7",padding:"3px 9px",borderRadius:12,whiteSpace:"nowrap"}}>CPT-ADMIN · NOT YOUR STEP</span>
       <span style={{fontSize:12,color:T.text}}>This step belongs to {curStep.name||"another approver"}. You can act on it as CPT-Admin, and the decision will be recorded in your name.</span></div>}
@@ -485,12 +493,14 @@ function VlDetail({req:r,me,onBack,onAct,procs=[],onOpenProc=()=>{},onReassign=(
     <div style={{height:12}}/>
     <Card style={{marginBottom:16,padding:20}}>
       <ST style={{fontSize:15,color:T.primary,marginBottom:12}}>{r.special==="obsolete"?"Obsolete Item Code Replacements":`Requested Changes (${(r.changes||[]).length})`}</ST>
-      <table style={{width:"100%",borderCollapse:"collapse"}}>
-        <thead><tr>{(r.special==="obsolete"?["Obsolete code","New code"]:["Field","From","To"]).map(h=><th key={h} style={{padding:"6px 8px",fontSize:10,fontWeight:700,color:T.textMut,textAlign:"left",textTransform:"uppercase",letterSpacing:0.4,borderBottom:`1px solid ${T.border}`}}>{h}</th>)}</tr></thead>
-        <tbody>{r.special==="obsolete"
-          ?(r.pairs||[]).map((c,i)=><tr key={i} style={{borderTop:`1px solid ${T.borderLight}`}}><td style={{padding:"8px",fontSize:12,color:T.err,textDecoration:"line-through"}}>{c.old}</td><td style={{padding:"8px",fontSize:12,fontWeight:700,color:T.ok}}>{c.new}</td></tr>)
-          :(r.changes||[]).map((c,i)=><tr key={i} style={{borderTop:`1px solid ${T.borderLight}`}}><td style={{padding:"8px",fontSize:12}}>{c.l}</td><td style={{padding:"8px",fontSize:12,color:T.textMut}}>{c.from||"—"}</td><td style={{padding:"8px",fontSize:12,fontWeight:700,color:T.warn}}>{c.to||"—"}</td></tr>)}</tbody>
-      </table>
+      {(()=>{const th=h=><th key={h} style={{padding:"6px 8px",fontSize:10,fontWeight:700,color:T.textMut,textAlign:"left",textTransform:"uppercase",letterSpacing:0.4,borderBottom:`1px solid ${T.border}`,width:h==="Field"?"34%":undefined}}>{h}</th>;
+        if(r.special==="obsolete")return <table style={{width:"100%",borderCollapse:"collapse"}}><thead><tr>{["Obsolete code","New code"].map(th)}</tr></thead>
+          <tbody>{(r.pairs||[]).map((c,i)=><tr key={i} style={{borderTop:`1px solid ${T.borderLight}`}}><td style={{padding:"8px",fontSize:12,color:T.err,textDecoration:"line-through"}}>{c.old}</td><td style={{padding:"8px",fontSize:12,fontWeight:700,color:T.ok}}>{c.new}</td></tr>)}</tbody></table>;
+        // live: one block per tab — "OVERVIEW (1)", then Field / Previous / New
+        return ["overview","templates","financial","system"].filter(t=>(r.changes||[]).some(c=>(c.tab||"overview")===t)).map(t=>{const rows=(r.changes||[]).filter(c=>(c.tab||"overview")===t);return <div key={t} style={{marginBottom:10}}>
+          <div style={{fontSize:10.5,fontWeight:800,color:T.primary,letterSpacing:0.5,marginBottom:4}}>{TAB_LBL[t].toUpperCase()} ({rows.length})</div>
+          <table style={{width:"100%",borderCollapse:"collapse"}}><thead><tr>{["Field","Previous","New"].map(th)}</tr></thead>
+            <tbody>{rows.map((c,i)=><tr key={i} style={{borderTop:`1px solid ${T.borderLight}`}}><td style={{padding:"8px",fontSize:12}}>{c.l}</td><td style={{padding:"8px",fontSize:12,color:T.textMut}}>{c.from||"—"}</td><td style={{padding:"8px",fontSize:12,fontWeight:700,color:T.warn}}>{c.to||"—"}</td></tr>)}</tbody></table></div>;});})()}
       <div style={{marginTop:14,padding:"10px 12px",background:"#eff6ff",borderRadius:8,borderLeft:`3px solid ${T.primary}`}}><div style={{fontSize:10,color:T.primary,fontWeight:800,textTransform:"uppercase",letterSpacing:0.4,marginBottom:3}}>Reason for this change</div><div style={{fontSize:12,color:T.text}}>{r.reason}</div></div>
       {fin&&<div style={{marginTop:10,fontSize:11,color:T.textSec}}>V{r.fromVer} stays approved and in force until this amendment completes. If it is rejected or withdrawn, the package stays at V{r.fromVer}.</div>}
     </Card>
@@ -499,15 +509,15 @@ function VlDetail({req:r,me,onBack,onAct,procs=[],onOpenProc=()=>{},onReassign=(
       <div style={{display:"flex",flexDirection:"column",gap:5}}>
         {fin?r.stages.map((st,i)=>stepRow(i+1,st.full||st.label,st.name,r.status==="completed"||i<r.stage?"done":i===r.stage&&!r.done&&r.status!=="returned"?"cur":"todo",st.extra&&<span style={{fontSize:9,color:T.purple,background:"#faf5ff",padding:"1px 6px",borderRadius:8}}>extra stage</span>))
           :<React.Fragment>{chain.map((st,i)=>stepRow(i+1,st.label,st.name,(r.status==="completed"||i<r.stage||r.phase==="confirm")?"done":i===r.stage&&!r.done&&r.status!=="returned"?"cur":"todo",st.delegable&&<span style={{fontSize:9,color:T.purple,background:"#faf5ff",padding:"1px 6px",borderRadius:8}}>can delegate</span>))}
-            {stepRow("",`Confirm on PrimeCare`,`${r.confirmRole} · ${r.confirmRole==="FCD"?"CFO":"CSCM Manager"}`,r.status==="completed"?"done":r.phase==="confirm"&&!r.done?"cur":"todo")}</React.Fragment>}
+            {stepRow("",`Confirm on PrimeCare`,`${r.confirmRole} · ${confirmName||(r.confirmRole==="FCD"?"CFO":"CSCM Manager")}`,r.status==="completed"?"done":r.phase==="confirm"&&!r.done?"cur":"todo")}</React.Fragment>}
       </div>
     </Card>
     {r.status==="returned"&&<Card style={{marginBottom:16,padding:18,borderLeft:`3px solid ${T.warn}`}}>
       <ST style={{fontSize:13,color:"#92400e",margin:"0 0 4px"}}>{raiser?"Returned to you for changes":`Returned to ${r.raisedBy} for changes`}</ST>
       <div style={{fontSize:12,color:T.textSec,lineHeight:1.55,maxWidth:560}}>{r.returnNote?.by} asked for changes before this can continue. The package itself is <strong>unchanged and still approved</strong> — it is the amendment that needs attention. Change what they asked for, then send it round again; it restarts at the first step, because everyone who already approved did so on different values.</div>
-      {r.returnNote&&<div style={{margin:"10px 0",padding:"8px 12px",background:"#fffbeb",borderRadius:6,fontSize:12}}>"{r.returnNote.text}"</div>}
+      {r.returnNote&&<div style={{margin:"10px 0",padding:"8px 12px",background:"#fffbeb",borderRadius:6,fontSize:12}}>“{r.returnNote.text}”</div>}
       {raiser&&<div style={{display:"flex",gap:8}}><button onClick={()=>onOpenProc(r.baseId,true)} style={{padding:"9px 18px",borderRadius:7,border:"none",background:T.primary,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Amend on the package →</button>
-        <button onClick={()=>{if(window.confirm(`Withdraw ${r.id}? The package stays at V${r.fromVer}.`))onAct(r,"withdraw");}} style={{padding:"9px 16px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",color:T.textSec,fontSize:12,fontWeight:600,cursor:"pointer"}}>Withdraw</button></div>}
+        {fin&&<button onClick={()=>{if(window.confirm(`Withdraw ${r.id}? The package stays at V${r.fromVer}.`))onAct(r,"withdraw");}} style={{padding:"9px 16px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",color:T.textSec,fontSize:12,fontWeight:600,cursor:"pointer"}}>Withdraw</button>}</div>}
     </Card>}
     {mine&&r.status!=="returned"&&decisionPanel(`Your decision — ${curLbl}`)}
     {adminCan&&<React.Fragment>
@@ -525,9 +535,28 @@ function VlDetail({req:r,me,onBack,onAct,procs=[],onOpenProc=()=>{},onReassign=(
       </Card>}
     </React.Fragment>}
     {!r.done&&!mine&&!adminCan&&r.status!=="returned"&&<Card style={{marginBottom:16,padding:16,background:"#f8fafc",textAlign:"center",color:T.textMut,fontSize:12}}>Waiting on {curLbl} — {curStep.name}.</Card>}
-    {raiser&&!r.done&&r.status!=="returned"&&<div style={{marginBottom:16,textAlign:"right"}}><button onClick={()=>{if(window.confirm(`Withdraw ${r.id}? The package stays at V${r.fromVer}.`))onAct(r,"withdraw");}} style={{padding:"7px 14px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",color:T.textSec,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Withdraw amendment</button></div>}
+    {fin&&raiser&&!r.done&&r.status!=="returned"&&<div style={{marginBottom:16,textAlign:"right"}}><button onClick={()=>{if(window.confirm(`Withdraw ${r.id}? The package stays at V${r.fromVer}.`))onAct(r,"withdraw");}} style={{padding:"7px 14px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",color:T.textSec,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Withdraw amendment</button></div>}
+    {docOpen&&<div onClick={()=>setDocOpen(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",zIndex:9996,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,width:"100%",maxWidth:500,padding:"18px 20px",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
+        <ST style={{fontSize:16,marginBottom:2,color:T.info}}>Request a Document</ST>
+        <div style={{fontSize:11.5,color:T.textSec,marginBottom:12}}>{r.baseId} · {r.cpt}</div>
+        <label style={{fontSize:11,fontWeight:700,color:T.textSec}}>Document type *</label>
+        <div style={{margin:"4px 0 10px"}}><Select value={docType} onChange={e=>setDocType(e.target.value)} style={{width:"100%"}}>{DOC_TYPES.map(d=><option key={d}>{d}</option>)}</Select></div>
+        <label style={{fontSize:11,fontWeight:700,color:T.textSec}}>Ask *</label>
+        <div style={{display:"flex",flexDirection:"column",gap:4,margin:"4px 0 4px"}}>{docPeople.map(x=><div key={x.name} onClick={()=>setDocWho(x)} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 10px",borderRadius:7,cursor:"pointer",border:`1px solid ${docWho&&docWho.name===x.name?T.info:T.border}`,background:docWho&&docWho.name===x.name?"#eff6ff":"#fff"}}>
+          <span style={{width:26,height:26,borderRadius:"50%",background:T.primaryLight,color:T.primary,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>{x.name.split(" ").filter(w=>/^[A-Z]/.test(w)).slice(-2).map(w=>w[0]).join("")}</span>
+          <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600}}>{x.name}</div><div style={{fontSize:10.5,color:T.textMut}}>{x.role}</div></div>
+          {x.tag&&<span style={{fontSize:9,fontWeight:800,color:T.ok,background:"#ecfdf5",padding:"1px 7px",borderRadius:8}}>{x.tag}</span>}</div>)}</div>
+        <div style={{fontSize:10.5,color:T.textMut,marginBottom:10,lineHeight:1.5}}>Only other people on this request. Whoever this stage is waiting on is not listed — they are the one being waited for. The suggestion follows the same route a modification would take from this stage.</div>
+        <label style={{fontSize:11,fontWeight:700,color:T.textSec}}>Note to the provider (optional)</label>
+        <textarea value={docNote} onChange={e=>setDocNote(e.target.value)} style={{...inp,height:52,resize:"vertical",fontFamily:T.font,margin:"4px 0 10px"}}/>
+        <div style={{fontSize:11,color:T.textSec,background:"#f8fafc",borderRadius:7,padding:"8px 10px",lineHeight:1.5}}><strong>What happens next:</strong> the request appears in their My Tasks and they are emailed. They either attach the document or mark it unavailable with a reason — and either way it comes back to you on the Requested tab. The package does not move or wait: this stage is still with its approver.</div>
+        <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}}>
+          <button onClick={()=>setDocOpen(false)} style={{padding:"8px 18px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+          <button onClick={()=>{if(!docWho){alert("Pick who to ask.");return;}onAct(r,"docreq",{type:docType,who:docWho,note:docNote});setDocOpen(false);setDocNote("");}} style={{padding:"8px 18px",borderRadius:7,border:"none",background:T.info,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Request & Notify</button>
+        </div></div></div>}
     <Card style={{padding:16}}><ST style={{fontSize:13,marginBottom:8}}>History</ST>
-      {(r.timeline||[]).slice().reverse().map((t,i,a)=><div key={i} style={{display:"flex",gap:10,fontSize:11,padding:"5px 0",borderBottom:i<a.length-1?`1px solid ${T.borderLight}`:"none"}}><span style={{color:T.textMut,width:120,flexShrink:0}}>{t.date}</span><span style={{fontWeight:600,width:170,flexShrink:0}}>{t.by}</span><span>{t.action}</span></div>)}
+      {(r.timeline||[]).slice().reverse().map((t,i,a)=><div key={i} style={{display:"flex",gap:10,fontSize:11,padding:"5px 0",borderBottom:i<a.length-1?`1px solid ${T.borderLight}`:"none"}}><span style={{color:T.textMut,width:130,flexShrink:0}}>{fmtDateTime(t.date)}</span><span style={{fontWeight:600,width:170,flexShrink:0}}>{t.by}</span><span>{t.action}</span></div>)}
     </Card>
   </div>;
 }
@@ -1048,7 +1077,9 @@ function SetupMigration({cptCodes=[],existingIds=[],onCommit=()=>{},showToast=()
 // SLA & Reminders (#13) — mirrors the Item Evaluation SLA setup
 function SetupSLA({config,setConfig,showToast,onBack}){
   const upd=(num,k,v)=>setConfig(config.map(c=>c.num===num?{...c,[k]:v===""?null:Number(v)}:c));
+  const toggleWd=num=>setConfig(config.map(c=>c.num===num?{...c,calendar:!c.calendar}:c));
   const thCell={padding:"10px 14px",fontSize:11,fontWeight:600,color:T.textSec,textAlign:"left",borderBottom:`1px solid ${T.border}`};
+  const nCal=config.filter(c=>c.calendar).length;
   const withSla=config.filter(c=>c.slaDays).length;
   const total=config.reduce((s,c)=>s+(c.slaDays||0),0);
   return <div style={{maxWidth:1600}}>
@@ -1056,7 +1087,7 @@ function SetupSLA({config,setConfig,showToast,onBack}){
     <h1 style={{fontSize:20,fontWeight:600,color:T.text,margin:0}}>⏱️ SLA & Reminders</h1>
     <p style={{fontSize:12,color:T.textSec,margin:"4px 0 14px"}}>How long each step may sit before it is overdue, and how many days ahead the approver is reminded. Leave the SLA blank for steps that shouldn't be timed.</p>
     <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
-      {[{l:"Steps with an SLA",v:`${withSla} of ${config.length}`,c:T.primary},{l:"Target end-to-end",v:`${total} days`,c:T.info},{l:"Reminder",v:"Daily once overdue",c:T.warn}].map((s,i)=>
+      {[{l:"Steps with an SLA",v:`${withSla} of ${config.length}`,c:T.primary},{l:"Target end-to-end",v:`${total} days`,c:T.info},{l:"Counting",v:nCal===0?"Working days":nCal===config.length?"Calendar days":"Mixed",c:T.warn}].map((s,i)=>
         <Card key={i} style={{padding:"12px 14px",borderLeft:`4px solid ${s.c}`}}><div style={{fontSize:10,color:T.textMut,fontWeight:700,textTransform:"uppercase"}}>{s.l}</div><div style={{fontSize:17,fontWeight:700,color:s.c,marginTop:2}}>{s.v}</div></Card>)}
     </div>
     <div style={{padding:10,marginBottom:12,borderRadius:6,background:"#fffbeb",border:`1px solid ${T.warn}40`,fontSize:11,color:"#92400e"}}>Changes apply to <strong>requests already in flight</strong> as well as new ones — a shortened SLA can immediately mark open requests overdue.</div>
@@ -1067,19 +1098,21 @@ function SetupSLA({config,setConfig,showToast,onBack}){
           <th style={thCell}>Stage</th>
           <th style={{...thCell,width:150}}>SLA (days)</th>
           <th style={{...thCell,width:190}}>Remind this many days before</th>
+          <th style={{...thCell,width:150}}>Counting</th>
         </tr></thead>
         <tbody>
           {config.map(c=><tr key={c.num} style={{borderTop:`1px solid ${T.borderLight}`}}>
             <td style={{padding:"8px 14px",textAlign:"center",fontSize:11,color:T.textMut}}>{c.num}</td>
             <td style={{padding:"8px 14px",fontSize:12,fontWeight:500,color:T.text}}>{c.label}</td>
             <td style={{padding:"6px 14px"}}><input type="number" min="0" style={{...inp,fontSize:12,padding:"6px 8px"}} value={c.slaDays==null?"":c.slaDays} onChange={e=>upd(c.num,"slaDays",e.target.value)} placeholder="none"/></td>
-            <td style={{padding:"6px 14px"}}><input type="number" min="0" disabled={!c.slaDays} style={{...inp,fontSize:12,padding:"6px 8px",background:c.slaDays?"#fff":"#f3f4f6"}} value={c.remindBefore==null?"":c.remindBefore} onChange={e=>upd(c.num,"remindBefore",e.target.value)}/></td>
+            <td style={{padding:"6px 14px"}}><input type="number" min="0" disabled={!c.slaDays} style={{...inp,fontSize:12,padding:"6px 8px",background:c.slaDays?"#fff":"#f3f4f6"}} value={c.remindBefore==null?"":c.remindBefore} aria-label={"Reminder lead time for "+c.label} onChange={e=>upd(c.num,"remindBefore",e.target.value)}/></td>
+            <td style={{padding:"6px 14px"}}><span onClick={()=>toggleWd(c.num)} title={"Toggle working-day counting for "+c.label} style={{cursor:"pointer",fontSize:10.5,fontWeight:700,padding:"3px 10px",borderRadius:12,background:c.calendar?"#f3f4f6":"#ecfdf5",color:c.calendar?T.textSec:T.ok,border:`1px solid ${c.calendar?T.border:T.ok+"40"}`}}>{c.calendar?"Calendar days":"Working days"}</span></td>
           </tr>)}
         </tbody>
       </table>
     </Card>
     <div style={{display:"flex",justifyContent:"flex-end",marginTop:14}}>
-      <button onClick={()=>showToast&&showToast("SLA settings saved — open requests re-evaluated")} style={{padding:"9px 20px",borderRadius:6,border:"none",background:T.primary,color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save Settings</button>
+      <button onClick={()=>showToast&&showToast("SLA settings saved — open requests re-evaluated. Working days skip Fridays, Saturdays and public holidays.")} style={{padding:"9px 20px",borderRadius:6,border:"none",background:T.primary,color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save Settings</button>
     </div>
   </div>;
 }
@@ -1092,7 +1125,9 @@ function SetupEmails({config,setConfig,showToast,onBack}){
   const thCell={padding:"10px 14px",fontSize:11,fontWeight:600,color:T.textSec,textAlign:"left",borderBottom:`1px solid ${T.border}`};
   const openEdit=e=>{setDraft({...e});setEditing(e.id);};
   const save=()=>{setConfig(config.map(c=>c.id===editing?{...c,...draft}:c));setEditing(null);showToast&&showToast("Email template updated");};
-  const toggle=e=>setConfig(config.map(c=>c.id===e.id?{...c,active:c.active===false}:c));
+  const[stopAsk,setStopAsk]=useState(null);
+  const toggle=e=>setStopAsk(e);
+  const doToggle=e=>{setConfig(config.map(c=>c.id===e.id?{...c,active:c.active===false}:c));setStopAsk(null);showToast&&showToast(e.active!==false?`No emails are sent for ${e.event} until it is switched back on.`:`Notifications resumed for ${e.event}.`);};
   const actBtn={padding:"4px 10px",borderRadius:5,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,fontWeight:600,cursor:"pointer",color:T.text,fontFamily:T.font};
   return <div style={{maxWidth:1600}}>
     <button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,color:T.textSec,marginBottom:12}}>← Back to Setup</button>
@@ -1114,6 +1149,14 @@ function SetupEmails({config,setConfig,showToast,onBack}){
         </tbody>
       </table>
     </Card>
+    {stopAsk&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:20}} onClick={()=>setStopAsk(null)}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:10,padding:22,width:440,boxShadow:"0 10px 40px rgba(0,0,0,0.2)"}}>
+        <ST style={{fontSize:15,marginBottom:8}}>{stopAsk.active!==false?"Stop notifications":"Resume notifications"} — “{stopAsk.event}”?</ST>
+        <div style={{fontSize:12,color:T.textSec,lineHeight:1.6,marginBottom:16}}>{stopAsk.active!==false?<>No email is sent for this event until it is switched back on. <strong>The workflow itself is unaffected</strong> — requests still move and My Tasks still lists them.</>:<>Emails for this event are sent again from the next time it happens.</>}</div>
+        <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+          <button onClick={()=>setStopAsk(null)} style={{padding:"8px 16px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,cursor:"pointer",fontFamily:T.font}}>Cancel</button>
+          <button onClick={()=>doToggle(stopAsk)} style={{padding:"8px 18px",borderRadius:6,border:"none",background:stopAsk.active!==false?T.err:T.primary,color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:T.font}}>{stopAsk.active!==false?"Stop notifications":"Resume notifications"}</button>
+        </div></div></div>}
     {editing!=null&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:20}} onClick={()=>setEditing(null)}>
       <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:10,padding:22,width:520,maxWidth:"100%",maxHeight:"90vh",overflow:"auto",boxShadow:"0 10px 40px rgba(0,0,0,0.2)"}}>
         <ST style={{fontSize:15,color:T.primary,marginBottom:14}}>Edit Email — {draft.event}</ST>

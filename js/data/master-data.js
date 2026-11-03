@@ -256,6 +256,7 @@ const ROLE_GROUPS=[
   {role:"cfo",label:"CFO",color:T.warn},{role:"cfo_del",label:"CFO Delegate",color:T.warn},
   {role:"ceo",label:"CEO",color:T.err},
   {role:"cscm",label:"CSCM Manager",color:T.primary},{role:"cscm_del",label:"CSCM Delegate",color:T.primary},
+  {role:"cfmo",label:"CFMO (Edit chain)",color:"#b45309"},
 ];
 
 // ─── WORKFLOW STAGES ─────────────────────────────────────────
@@ -379,7 +380,7 @@ function resolveEditRole(roleKey,base,design,approvalConfig){
   const r=(design.roles||[]).find(x=>x.key===roleKey)||{key:roleKey,label:roleKey};
   const br=r.branch==="other"?otherBr(base.branch):base.branch;
   const name=r.row==="cfmo"?((design.editChain||{}).cfmo||{})[br]:(((approvalConfig.find(c=>c.num===r.row)||{}).approvers||{})[br]);
-  const lbl=r.key==="req_chief"?`Requestor Chief · ${base.specialty||"Specialty"}`:(["cmio","cmo","cmio_other","cmo_other"].includes(r.key)?`${r.label} (${br})`:r.label);
+  const lbl=r.key==="req_chief"?`Requestor Chief · ${base.specialty||"Specialty"}`:(["cmio","cmo","cmio_other","cmo_other"].includes(r.key)?`${r.label} (${/_other$/.test(r.key)?otherBr(base.branch):br})`:r.label);
   return {role:r.key,label:lbl,short:r.label,name:name||"— not set —",delegable:!!r.delegable,branch:br};
 }
 // The single rule the raise freezes: scenarios touched → ordered, de-duplicated route.
@@ -669,12 +670,16 @@ const SLA_CONFIG_DEFAULT=[
   {num:14,label:"CSCM Template Link",slaDays:2,remindBefore:1},
   {num:15,label:"CFO Acknowledgement",slaDays:2,remindBefore:1},
 ];
+// Working days (live): Fridays, Saturdays and active public holidays are skipped.
+const isWorkDay=d=>{const w=d.getDay();if(w===5||w===6)return false;const iso=d.toISOString().slice(0,10);return !(typeof HOLIDAYS_DEFAULT!=="undefined"&&HOLIDAYS_DEFAULT.some(h=>h.isActive!==false&&h.date===iso));};
+const workDaysBtw=(a,b)=>{const x=new Date(a);x.setHours(12,0,0,0);const y=new Date(b);y.setHours(12,0,0,0);let n=0;const sign=x<=y?1:-1;while(sign>0?x<y:x>y){x.setDate(x.getDate()+sign);if(isWorkDay(x))n+=sign;}return n;};
+const addWorkDays=(d,n)=>{const x=new Date(d||Date.now());x.setHours(12,0,0,0);let k=0;while(k<n){x.setDate(x.getDate()+1);if(isWorkDay(x))k++;}return x;};
 // Single place that decides where a live request sits against its SLA.
 const slaStateFor=(proc,slaCfg)=>{
   if(!proc||["approved","rejected","cpt_exists"].includes(proc.status))return null;
   const c=(slaCfg||[]).find(x=>x.num===proc.currentStage);
   if(!c||!c.slaDays)return null;
-  const elapsed=daysBtw(proc.stageStartDate,new Date());
+  const elapsed=c.calendar?daysBtw(proc.stageStartDate,new Date()):workDaysBtw(proc.stageStartDate,new Date());
   const left=c.slaDays-elapsed;
   const state=left<0?"overdue":left===0?"due":left<=(c.remindBefore||1)?"soon":"ok";
   return {elapsed,left,slaDays:c.slaDays,state,label:c.label,remindBefore:c.remindBefore||1};
@@ -742,8 +747,8 @@ const CERT_NOTIFY_LIST=["Requestor","CSCM","Finance","CNO","CMO","Insurance"];
 
 // CPT Exists short path: CMIO→CFO(ack)→CMO(ack)→Done
 const EXIST_STAGES=[
-  {num:1,label:"Doctor Request"},{num:2,label:"CMO Approval"},{num:3,label:"CMIO Validation"},
-  {num:"E1",label:"CFO Acknowledged"},{num:"E2",label:"CMO Acknowledged"},
+  {num:1,label:"Doctor Request",sla:"3 Days"},{num:2,label:"CMO Approval",sla:"1 Day"},{num:3,label:"CMIO Validation",sla:"3 Days"},
+  {num:4,label:"CPT Exists — CFO Acknowledgement",sla:"2 Days"},{num:5,label:"CPT Exists — CMO Acknowledgement",sla:"1 Day"},
 ];
 
 const STATUS={
@@ -775,7 +780,7 @@ const STATUS={
 
 // ─── HELPERS ─────────────────────────────────────────────────
 const fmtDate=d=>d?new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}):"—";
-const fmtDateTime=d=>{if(!d)return"—";const x=new Date(String(d).length===16?String(d).replace(" ","T"):d);return isNaN(x)?String(d):x.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})+", "+x.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});};
+const fmtDateTime=d=>{if(!d)return"—";if(/^\d{4}-\d{2}-\d{2}$/.test(String(d)))return fmtDate(d);const x=new Date(String(d).length===16?String(d).replace(" ","T"):d);return isNaN(x)?String(d):x.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})+", "+x.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});};
 // KWD Accounting Format: thousands comma separated
 const fmtKWD=v=>{if(v==null||v==="")return"—";const n=Number(v);return"KWD "+n.toLocaleString("en-US",{minimumFractionDigits:3,maximumFractionDigits:3});};
 const daysBtw=(a,b)=>Math.floor((new Date(b)-new Date(a))/86400000);

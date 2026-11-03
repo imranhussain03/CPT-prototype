@@ -253,6 +253,44 @@ const PROCS=[
       versionHistory:[{version:1,date:ago(111),changedBy:"Migration",summary:"Migrated from PrimeCare"}]})
   );
 })();
+
+// ─── MULTI-VERSION DEMO (live: CPT-2026-00723 went V1 → V5 through NF and FIN amendments) ───
+(()=>{
+  const base=PROCS.find(p=>p.id==="00001");const cl=o=>JSON.parse(JSON.stringify(o));const doc=uf("u1");
+  const ago=n=>{const x=new Date();x.setDate(x.getDate()-n);return x.toISOString().slice(0,10);};
+  const fin={...cl(base.financial),finalPatientPrice:2600,ceoAdjustedPrice:2600,cfoPrice:2450,ceoApproved:true,ceoBy:"Dr. Abdul Rahman Al-Mutairi",ceoDate:ago(5)+" 11:10",manpowerCost:2000,totalServicesCost:2800,totalOverallCost:3129.85,marginPercent:-16.9,hasCap:"Yes",capLimit:2400};
+  const tl=(v,dt,action,user,role,type,comment)=>({ver:v,date:dt,action,user,role,type,comment});
+  PROCS.push({...cl(base),id:"00042",version:4,status:"approved",lifecycle:"Active",requestDate:ago(70),branch:"NTH",requestor:doc,
+    specialty:"ENT",proposedCptCode:"11444",proposedCptName:"Excision, other benign lesion incl. margins, face/ears/nose, 3.1-4.0 cm",accurateCptCode:"11444",accurateCptName:"Excision, other benign lesion incl. margins, face/ears/nose, 3.1-4.0 cm",cptStatus:"New",
+    patientType:"In-Patient",anesthesia:"Required",gender:"Male",opSkill:"Advanced Intervention",suggestedPrice:2000,accommodationDays:2,procedureDuration:"2:00",
+    manpower:"1 Surgeon; 1 Anesthetist; 2 Scrub Nurses",machinesDevices:"Electrocautery unit; Operating microscope",labRadiology:"CBC; Histopathology",consumablesDrugs:"Sutures 5-0",extraServices:"Dressing review",
+    financial:fin,systemSetup:{...cl(base.systemSetup),opCode:"10842042",opName:"Excision benign lesion face 3.1-4.0 cm",pkgId:"4042",pkgName:"Facial Lesion Excision (Large)"},
+    currentStage:16,stageStartDate:ago(5),
+    editDiff:{fromVersion:3,items:[
+      {sec:"fields",label:"Accommodation Days",old:"1",new:"2"},{sec:"fields",label:"Surgery Duration",old:"1:30",new:"2:00"},
+      {sec:"los",label:"Man Power",added:["2 Scrub Nurses"],removed:["1 Scrub Nurse"]},
+      {sec:"templates",label:"Procedure Consumables",added:["IV Cannula 22G Safety (10202080300008) · 2 PIECE"],removed:["Surgical Blade No.10 (CON-010) · 1 Each"]},
+      {sec:"financials",label:"Manpower cost",old:"1200",new:"2000"},{sec:"financials",label:"Total services cost",old:"2000",new:"2800"},{sec:"financials",label:"Total overall cost",old:"2329.850",new:"3129.850"},{sec:"financials",label:"Maximum CAP limit",old:"0",new:"2400"},
+    ]},
+    versionHistory:[
+      {version:1,date:ago(60),changedBy:doc.name,change:"Request raised",summary:"Request raised"},
+      {version:2,date:ago(40),changedBy:doc.name,change:"Non-financial edit",summary:"Combined change NF-006 — Clinical + CPT",editDiff:[{l:"Patient Type",old:"Both",new:"In-Patient"},{l:"Specialty",old:"Endoscopy",new:"ENT"},{l:"CPT Code",old:"43239",new:"11444"},{l:"CPT Name",old:"Upper GI Endoscopy with Biopsy",new:"Excision, other benign lesion…"},{l:"Gender",old:"Female",new:"Male"}]},
+      {version:3,date:ago(25),changedBy:uf("u10").name,change:"Non-financial edit",summary:"Combined change NF-007 — PKGID + Op code",editDiff:[{l:"PKGID",old:"4041",new:"4042"},{l:"Package Name",old:"Facial Lesion Excision",new:"Facial Lesion Excision (Large)"},{l:"Operation Code",old:"10842041",new:"10842042"}]},
+      {version:4,date:ago(5),changedBy:doc.name,change:"Financial edit",summary:"Finance — new version V4",editDiff:[{l:"Accommodation Days",old:"1",new:"2"},{l:"Surgery Duration",old:"1:30",new:"2:00"},{l:"Man Power",old:"1 Scrub Nurse",new:"2 Scrub Nurses"},{l:"Manpower cost",old:"1200",new:"2000"},{l:"Maximum CAP limit",old:"0",new:"2400"}]},
+    ],
+    timeline:[
+      tl(1,ago(70)+" 09:00","Request raised and submitted for CMO approval",doc.name,"Doctor","create"),
+      tl(1,ago(60)+" 12:00","CFO acknowledged — package approved and certificate issued for version 1",uf("u10").name,"CFO","acknowledge"),
+      tl(2,ago(42)+" 10:00","Amendment NF-006 raised — Clinical + CPT",doc.name,"Doctor","create","Patient pathway changed to in-patient; coding corrected"),
+      tl(2,ago(40)+" 15:00","NF-006 confirmed on PrimeCare and applied as version V2",uf("u13").name,"CSCM","complete"),
+      tl(3,ago(27)+" 09:30","Amendment NF-007 raised — PKGID + Op code",uf("u10").name,"CFO","create","PrimeCare package re-keyed"),
+      tl(3,ago(25)+" 14:00","NF-007 confirmed on PrimeCare and applied as version V3",uf("u10").name,"CFO","complete"),
+      tl(4,ago(12)+" 09:00","Financial edit FIN-003 raised — Finance — new version V4",doc.name,"Doctor","create","Longer stay and extra scrub nurse"),
+      tl(4,ago(9)+" 11:00","Financials (FCD) — approved; sent to CEO Price Review",uf("u10").name,"CFO","approve"),
+      tl(4,ago(8)+" 11:10","CEO approved & adjusted the patient price",uf("u12").name,"CEO","approve"),
+      tl(4,ago(5)+" 12:00","CFO acknowledged — package approved and certificate issued for version 4",uf("u10").name,"CFO","acknowledge"),
+    ]});
+})();
 // Edit requests in every state the live Dashboard shows: in approval, returned, awaiting PrimeCare confirm,
 // applied, rejected, withdrawn — plus a finance re-run (FIN) that adds Other-branch CMIO and CFMO as numbered stages.
 function seedEditReqs(procs,design,cfg){
@@ -272,5 +310,13 @@ function seedEditReqs(procs,design,cfg){
     reason:"Paediatric variant split out — repriced for the new consumables",stages:frt.stages,stage:ceoIx,phase:"approval",status:"pending",done:false,raisedBy:"Dr. Ahmed Al-Rashidi",fromVer:1,toVer:2,date:d(6),stageDate:d(4),
     timeline:frt.stages.slice(0,ceoIx).map((s,i)=>({by:s.name||"Approver",action:`${s.full||s.label} — Approved (V2 re-run)`,date:d(6-Math.min(i,5))+" 10:00"}))});
   out.push({id:"FIN-002",kind:"fin",baseId:"00012",cpt:b12.accurateCptName,branch:b12.branch,scenarios:["finance"],groupId:"finance",groupName:"Finance",changes:[{k:"accommodationDays",l:"Accommodation Days",from:"1",to:"2",tab:"overview"}],reason:"Longer observation",stages:buildEditRoute(["finance"],b12,design,cfg).stages,stage:2,phase:"done",status:"withdrawn",done:true,raisedBy:"Dr. Ahmed Al-Rashidi",fromVer:1,toVer:2,date:"2026-08-20",timeline:[{by:"Dr. Ahmed Al-Rashidi",action:"Amendment FIN-002 raised — Finance",date:"2026-08-20 09:00"},{by:"Dr. Ahmed Al-Rashidi",action:"Withdrawn by the raiser — package stays at V1",date:"2026-08-21 08:30"}]});
+  // multi-version demo package 00042 — the applied amendments behind V2, V3 and V4
+  out.push(nf("NF-006","00042",["clinical","cpt"],[{k:"patientType",l:"Patient Type",from:"Both",to:"In-Patient",tab:"overview"},{k:"specialty",l:"Specialty",from:"Endoscopy",to:"ENT",tab:"overview"},{k:"cptCode",l:"CPT Code",from:"43239",to:"11444",tab:"overview"},{k:"gender",l:"Gender",from:"Female",to:"Male",tab:"overview"}],"Patient pathway changed to in-patient; coding corrected","Dr. Ahmed Al-Rashidi",{fromVer:1,toVer:2,status:"completed",done:true,phase:"done",date:d(42),timeline:[{by:"Dr. Ahmed Al-Rashidi",action:"Amendment NF-006 raised — Clinical + CPT",date:d(42)+" 10:00"},{by:"Mr. Fares Al-Methen",action:"Confirmed on PrimeCare — applied as V2",date:d(40)+" 15:00"}]}));
+  out.push(nf("NF-007","00042",["pkg","opcode"],[{k:"pkgId",l:"PKGID",from:"4041",to:"4042",tab:"system"},{k:"pkgName",l:"Package Name",from:"Facial Lesion Excision",to:"Facial Lesion Excision (Large)",tab:"system"},{k:"opCode",l:"Operation Code",from:"10842041",to:"10842042",tab:"system"}],"PrimeCare package re-keyed","Mr. Yousef Al-Bahar",{fromVer:2,toVer:3,status:"completed",done:true,phase:"done",date:d(27),timeline:[{by:"Mr. Yousef Al-Bahar",action:"Amendment NF-007 raised — PKGID + Op code",date:d(27)+" 09:30"},{by:"Mr. Yousef Al-Bahar",action:"Confirmed on PrimeCare — applied as V3",date:d(25)+" 14:00"}]}));
+  {const b=P("00042");const r3=buildEditRoute(["finance"],b,design,cfg);
+   out.push({id:"FIN-003",kind:"fin",baseId:"00042",cpt:b.accurateCptName,branch:b.branch,scenarios:["finance"],groupId:"finance",groupName:"Finance",
+     changes:[{k:"accommodationDays",l:"Accommodation Days",from:"1",to:"2",tab:"overview"},{k:"procedureDuration",l:"Surgery Duration",from:"1:30",to:"2:00",tab:"overview"},{k:"capLimit",l:"Maximum CAP Limit",from:"0",to:"2400",tab:"financial"}],
+     reason:"Longer stay and extra scrub nurse",stages:r3.stages,stage:r3.stages.length,phase:"done",status:"completed",done:true,raisedBy:"Dr. Ahmed Al-Rashidi",fromVer:3,toVer:4,date:d(12),stageDate:d(5),
+     timeline:r3.stages.map((s,i)=>({by:s.name||"Approver",action:`${s.full||s.label} — Approved (V4 re-run)`,date:d(12-Math.min(i,7))+" 10:00"}))});}
   return out;
 }

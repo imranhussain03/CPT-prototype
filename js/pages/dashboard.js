@@ -2,7 +2,7 @@
 // DASHBOARD
 // ═══════════════════════════════════════════════════════════════
 const ScenChips=({r})=><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{(r.scenarios||[r.groupId]).map(s=><span key={s} style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:8,background:s==="finance"?"#fffbeb":"#ecfdf5",color:s==="finance"?"#b45309":T.primary,border:`1px solid ${s==="finance"?"#fde68a":T.primary+"30"}`}}>{SCEN_SHORT[s]||s}</span>)}</span>;
-const editStatusOf=r=>r.status==="returned"?{k:"returned",l:"Returned for changes",c:T.warn}:r.status==="completed"?{k:"applied",l:"Applied",c:T.ok}:r.status==="rejected"?{k:"rejected",l:"Rejected",c:T.err}:r.status==="withdrawn"?{k:"withdrawn",l:"Withdrawn",c:T.textMut}:r.phase==="confirm"?{k:"confirm",l:`Awaiting PrimeCare confirm (${r.confirmRole})`,c:T.info}:{k:"approval",l:r.kind==="fin"?`In approval — re-running all stages as V${r.toVer}`:"In approval",c:"#b45309"};
+const editStatusOf=r=>r.status==="returned"?{k:"returned",l:"Returned for changes",c:T.warn}:r.status==="completed"?{k:"applied",l:r.kind==="fin"?"Applied":`Applied — V${r.toVer}`,c:T.ok}:r.status==="rejected"?{k:"rejected",l:"Rejected",c:T.err}:r.status==="withdrawn"?{k:"withdrawn",l:"Withdrawn",c:T.textMut}:r.phase==="confirm"?{k:"confirm",l:`Awaiting PrimeCare confirm (${r.confirmRole})`,c:T.info}:{k:"approval",l:r.kind==="fin"?`In approval — re-running all stages as V${r.toVer}`:"In approval",c:"#b45309"};
 function EditReqPanel({title,sub,reqs,fin,me,onOpenVl}){
   const chipsDef=fin?[["approval","In approval"],["returned","Returned"],["approved","Approved"],["applied","Applied"],["rejected","Rejected"],["withdrawn","Withdrawn"]]:[["approval","In approval"],["returned","Returned"],["confirm","Awaiting PrimeCare confirm"],["applied","Applied"],["rejected","Rejected"],["withdrawn","Withdrawn"]];
   const[f,setF]=useState("open");
@@ -21,7 +21,7 @@ function EditReqPanel({title,sub,reqs,fin,me,onOpenVl}){
       <table style={{width:"100%",borderCollapse:"collapse"}}><thead><tr style={{background:T.primaryLight}}>
         {(fin?["Req ID","Base #","Version","Scenarios","Route","Current Step","Status",""]:["Req ID","Base #","Scenarios","Changes","Current Step","Status",""]).map((h,i)=><th key={i} style={thS}>{h}</th>)}
       </tr></thead><tbody>
-        {shown.length===0&&<tr><td colSpan={8} style={{padding:20,textAlign:"center",color:T.textMut,fontSize:12}}>{f==="open"?"Nothing open — use the chips to see applied, rejected or withdrawn changes.":"None."}</td></tr>}
+        {shown.length===0&&<tr><td colSpan={8} style={{padding:20,textAlign:"center",color:T.textMut,fontSize:12}}>{f==="open"?(fin?"No finance edits in approval.":"No non-finance edit requests open — open an approved package and use Edit Package."):"None."}</td></tr>}
         {shown.map(r=>{const s=editStatusOf(r);const mine=editTurn(r,me);const ex=(r.stages||[]).filter(x=>x.extra);
           return <tr key={r.id} onClick={()=>onOpenVl(r)} style={{cursor:"pointer",borderTop:`1px solid ${T.borderLight}`}} onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
             <td style={{...tdS,fontWeight:700,color:T.primary}}>{r.id}</td>

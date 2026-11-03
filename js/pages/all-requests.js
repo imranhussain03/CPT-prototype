@@ -28,7 +28,7 @@ function AllRequests({procs,onSel,initStatus="all",vlReqs=[]}){
       <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
         <div style={{flex:"1 1 220px",minWidth:200,position:"relative"}}>
           <Ic n="search" s={13} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMut}}/>
-          <input style={{...inp,fontSize:12,margin:0,paddingLeft:30}} placeholder="Search ID, CPT, requestor…" value={search} onChange={e=>setSearch(e.target.value)}/>
+          <input style={{...inp,fontSize:12,margin:0,paddingLeft:30}} placeholder="Search requests" value={search} onChange={e=>setSearch(e.target.value)}/>
         </div>
         <Select style={fsel} value={statusF} onChange={e=>setStatusF(e.target.value)}><option value="all">All Statuses</option>{[...new Set(procs.map(p=>p.status))].sort().map(s=><option key={s} value={s}>{(STATUS[s]||{}).label||s.replace(/_/g," ")}</option>)}</Select>
         <Select style={fsel} value={branchF} onChange={e=>setBranchF(e.target.value)}><option value="all">All Branches</option>{BRANCHES.map(b=><option key={b.code} value={b.code}>{b.name}</option>)}</Select>
@@ -43,7 +43,7 @@ function AllRequests({procs,onSel,initStatus="all",vlReqs=[]}){
       <th style={{padding:"10px 12px",fontSize:10,fontWeight:800,color:T.textSec,textTransform:"uppercase",letterSpacing:0.4,textAlign:"left"}}>Type</th>
       <TH k="date">Date</TH><TH k="specialty">Specialty</TH><TH k="cpt">CPT Code</TH><TH k="cptname">CPT Name</TH><TH k="branch">Branch</TH><TH k="status">Status</TH><TH k="requestor">Requestor</TH><TH k="ver">Ver</TH>
     </tr></thead><tbody>
-      {filtered.length===0&&<tr><td colSpan={10} style={{padding:40,textAlign:"center",color:T.textMut}}>No results</td></tr>}
+      {filtered.length===0&&<tr><td colSpan={10} style={{padding:40,textAlign:"center",color:T.textMut}}>{procs.length===0?"You are not involved in any packages yet. A package appears here the moment it reaches you, and stays afterwards.":"No packages match your search or filter."}</td></tr>}
       {filtered.map(p=><tr key={p.id} onClick={()=>onSel(p)} style={{cursor:"pointer",borderBottom:`1px solid ${T.borderLight}`}} onMouseEnter={e=>e.currentTarget.style.background="#f8fafc"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
         <td style={{padding:"10px 12px",fontSize:12,fontWeight:600,color:T.primary}}>{p.id}</td>
         <td style={{padding:"10px 12px"}}><TypeBadge p={p}/></td>

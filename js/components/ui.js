@@ -53,7 +53,7 @@ const ST=({children,color=T.primary,style:s={}})=><h3 style={{fontSize:14,fontWe
 const BTN={padding:"9px 20px",borderRadius:8,border:"none",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:7};
 const BTN2={...BTN,background:"#fff",fontWeight:600};
 const ActionBar=({label,me,children,comment,more=[],icon="zap",sub})=>(
-  <React.Fragment><div style={{height:78}}/><div data-tour="actionbar" style={{position:"fixed",bottom:0,left:200,right:0,zIndex:60,background:"#fff",borderTop:`1px solid ${T.border}`,boxShadow:"0 -8px 24px rgba(15,23,42,0.12)",padding:"12px 80px 12px 24px",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+  <React.Fragment><div style={{height:78}}/><div data-tour="actionbar" style={{position:"fixed",bottom:0,left:186,right:0,zIndex:60,background:"#fff",borderTop:`1px solid ${T.border}`,boxShadow:"0 -8px 24px rgba(15,23,42,0.12)",padding:"12px 80px 12px 24px",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
     <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0,flex:"1 1 200px"}}>
       <Ic n={icon} s={15} style={{color:icon==="zap"?T.warn:T.textMut}}/>
       <div style={{minWidth:0}}>
@@ -422,17 +422,17 @@ function TemplateSummary({templates,defaultExpand}){
         return<div style={{maxHeight:420,overflow:"auto"}}>
           <table style={{width:"100%",borderCollapse:"collapse",minWidth:860}}>
             <thead><tr style={{background:T.primaryLight,position:"sticky",top:0,zIndex:1}}>
-              {["#","Code","Name","UOM","Qty","Unit Cost","Total Cost","Sale Price","Total Sale","Last Updated"].map(h=><th key={h} style={{...th,textAlign:h==="#"||h==="Qty"?"center":"left",fontSize:10,whiteSpace:"nowrap"}}>{h}</th>)}
+              {["#","Code","Name","UOM","Qty","Unit Cost","Total Cost","Sale Price","Total Sale"].map(h=><th key={h} style={{...th,textAlign:h==="#"||h==="Qty"?"center":"left",fontSize:10,whiteSpace:"nowrap"}}>{h}</th>)}
             </tr></thead>
             <tbody>
               {catKeys.map(cat=>{
                 const subKeys=Object.keys(groups[cat]).sort((a,b)=>a.localeCompare(b));
                 return<React.Fragment key={cat}>
-                  <tr><td colSpan={10} style={{padding:"8px 12px",background:T.primary+"12",fontWeight:700,fontSize:11,color:T.primary,textTransform:"uppercase",letterSpacing:0.4}}><Ic n="folder" s={11}/> {cat}</td></tr>
+                  <tr><td colSpan={9} style={{padding:"8px 12px",background:T.primary+"12",fontWeight:700,fontSize:11,color:T.primary,textTransform:"uppercase",letterSpacing:0.4}}><Ic n="folder" s={11}/> {cat}</td></tr>
                   {subKeys.map(sub=>{
                     const list=groups[cat][sub].slice().sort((a,b)=>String(a.name||"").localeCompare(String(b.name||"")));
                     return<React.Fragment key={cat+"|"+sub}>
-                      <tr><td colSpan={10} style={{padding:"5px 12px 5px 24px",background:"#f1f5f9",fontWeight:600,fontSize:10.5,color:T.textSec}}>↳ {sub} <span style={{color:T.textMut,fontWeight:400}}>({list.length})</span></td></tr>
+                      <tr><td colSpan={9} style={{padding:"5px 12px 5px 24px",background:"#f1f5f9",fontWeight:600,fontSize:10.5,color:T.textSec}}>↳ {sub} <span style={{color:T.textMut,fontWeight:400}}>({list.length})</span></td></tr>
                       {list.map((it,ii)=>{rn++;return<tr key={cat+sub+ii} style={{borderBottom:`1px solid ${T.borderLight}`,background:rn%2===0?"#f8fafb":"#fff"}}>
                         <td style={{...td,fontWeight:600,color:T.primary,textAlign:"center"}}>{rn}</td>
                         <td style={{...td,textAlign:"left",fontWeight:500}}>{it.code}</td>
@@ -443,7 +443,6 @@ function TemplateSummary({templates,defaultExpand}){
                         <td style={{...td,textAlign:"left",fontWeight:700,color:T.primary}}>{fmtKWD(it.totalCost)}</td>
                         <td style={{...td,textAlign:"left",color:T.ok}}>{it._sale!=null?fmtKWD(it._sale):"—"}</td>
                         <td style={{...td,textAlign:"left",fontWeight:700,color:T.ok}}>{it._totalSale!=null?fmtKWD(it._totalSale):"—"}</td>
-                        <td style={{...td,textAlign:"left",fontSize:10,color:T.textMut,whiteSpace:"nowrap"}}>{it._updated}</td>
                       </tr>;})}
                     </React.Fragment>;
                   })}
@@ -462,20 +461,29 @@ function TemplateSummary({templates,defaultExpand}){
         </div>;
       })():<div style={{padding:30,textAlign:"center",color:T.textMut}}>No items added</div>}
     </Card>
-    {/* Grand Total - now spells out all 4 template names */}
-    {grandTotal>0&&<div style={{padding:"14px 18px",background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",borderRadius:10,border:`2px solid ${T.ok}40`,marginTop:8}}>
-      <div style={{fontSize:11,fontWeight:700,color:T.ok,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>All Templates Total (Proc + Wards)</div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr) auto",gap:10,alignItems:"center"}}>
-        {cardTotals.map(c=><div key={c.k} style={{padding:"6px 10px",background:"#fff",borderRadius:6,borderLeft:`3px solid ${T.ok}40`}}>
-          <div style={{fontSize:10,color:T.textMut,fontWeight:500,display:"flex",alignItems:"center",gap:5}}><Ic n={c.icon} s={11}/>{c.t}</div>
-          <div style={{fontSize:13,fontWeight:700,color:c.total>0?T.primary:T.textMut,marginTop:2}}>{fmtKWD(c.total)}</div>
+    <AllTemplatesTotal templates={templates} style={{marginTop:8}}/>
+  </div>;
+}
+
+// Live "ALL TEMPLATES TOTAL (PROCEDURE + WARDS)" strip — per-list cost & sale, then TOTAL COST / TOTAL SALE.
+const TPL_LISTS=[{k:"procCons",t:"Procedure Consumables",icon:"clipboard"},{k:"wardsCons",t:"Wards Consumables",icon:"building"},{k:"procDrugs",t:"Procedure Drugs",icon:"pill"},{k:"wardsDrugs",t:"Wards Drugs",icon:"pencil"}];
+const lineSale=it=>{const sp=it.salePrice!=null?it.salePrice:saleForUom(it.code,it.uom);return sp!=null?sp*(Number(it.qty)||0):null;};
+function AllTemplatesTotal({templates={},style={}}){
+  const rows=TPL_LISTS.map(l=>{const its=templates[l.k]||[];const cost=its.reduce((s,i)=>s+(i.totalCost||0),0);const sales=its.map(lineSale).filter(v=>v!=null);return {...l,cost,sale:its.length&&sales.length?sales.reduce((s,v)=>s+v,0):null};});
+  const tc=rows.reduce((s,r)=>s+r.cost,0);const ts=rows.reduce((s,r)=>s+(r.sale||0),0);
+  return <div style={{padding:"14px 18px",background:"#ecfdf5",borderRadius:10,border:`1.5px solid ${T.ok}60`,...style}}>
+    <div style={{fontSize:11,fontWeight:800,color:T.ok,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>All Templates Total (Procedure + Wards)</div>
+    <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+      <div style={{flex:1,display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,minWidth:420}}>
+        {rows.map(r=><div key={r.k} style={{padding:"2px 8px"}}>
+          <div style={{fontSize:10.5,color:T.textMut,display:"flex",alignItems:"center",gap:5}}><Ic n={r.icon} s={11}/>{r.t}</div>
+          <div style={{fontSize:13,fontWeight:700,color:r.cost>0?T.primaryDark||T.primary:T.textMut,marginTop:2}}>Cost {fmtKWD(r.cost)}</div>
+          <div style={{fontSize:11.5,fontWeight:600,color:r.sale!=null?T.ok:T.textMut}}>Sale {r.sale!=null?fmtKWD(r.sale):"—"}</div>
         </div>)}
-        <div style={{padding:"10px 16px",background:T.ok,borderRadius:6,color:"#fff",textAlign:"right",minWidth:140}}>
-          <div style={{fontSize:10,color:"#fff",opacity:0.9,fontWeight:500}}>GRAND TOTAL</div>
-          <div style={{fontSize:18,fontWeight:800,color:"#fff",marginTop:2}}>{fmtKWD(grandTotal)}</div>
-        </div>
       </div>
-    </div>}
+      <div style={{padding:"8px 18px",background:T.primaryDark||"#005549",borderRadius:6,color:"#fff",textAlign:"right",minWidth:150}}><div style={{fontSize:9.5,opacity:0.85,fontWeight:700,letterSpacing:0.4}}>TOTAL COST</div><div style={{fontSize:17,fontWeight:800}}>{fmtKWD(tc)}</div></div>
+      <div style={{padding:"8px 18px",background:T.ok,borderRadius:6,color:"#fff",textAlign:"right",minWidth:150}}><div style={{fontSize:9.5,opacity:0.9,fontWeight:700,letterSpacing:0.4}}>TOTAL SALE</div><div style={{fontSize:17,fontWeight:800}}>{fmtKWD(ts)}</div></div>
+    </div>
   </div>;
 }
 
@@ -541,7 +549,7 @@ function FinCards({fin,efEdit,stage}){
   return<div style={{marginBottom:18}}>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:12,marginBottom:14}}>
       {hero("Total package cost",fmtKWD(overall),"#334155",`OT Templates ${fmtKWD(tpl)} + Services & LOS ${fmtKWD(svc)}`,null,"#f8fafc")}
-      {hero("Final patient price",price?fmtKWD(price):"—",T.primary,fin.ceoAdjustedPrice?"Adjusted & approved by the CEO":(stage&&stage<=11?"Set by the CFO · awaiting CEO review":"Set by the CFO · approved by the CEO"),efEdit&&efEdit("finalPatientPrice"),"#f0fdfa")}
+      {hero("Final patient price",price?fmtKWD(price):"—",T.primary,fin.ceoAdjustedPrice?"Adjusted & approved by the CEO":(stage&&stage<=11?"Set by the CFO · awaiting CEO review":"Set by the CFO · confirmed by the CEO"),efEdit&&efEdit("finalPatientPrice"),"#f0fdfa")}
       {hero("Margin (on cost)",margin!=null?margin.toFixed(1)+"%":"—",pos?T.ok:T.err,price&&overall?`${pos?"+":""}${fmtKWD(price-overall)} vs cost`:"Awaiting price",
         margin!=null&&<span style={{fontSize:9.5,fontWeight:800,letterSpacing:0.5,padding:"3px 10px",borderRadius:20,background:pos?"#dcfce7":"#fee2e2",color:pos?T.ok:T.err}}>{pos?"PROFIT":"LOSS"}</span>,pos?"#f0fdf4":"#fef2f2")}
     </div>
@@ -595,56 +603,48 @@ function WfTracker({stages,cur}){
 }
 
 // ─── DELEGATION MODAL ────────────────────────────────────────
-function DelegateModal({isOpen,onClose,onSubmit,stageName,delegateRole}){
+// Live: the stage's configured delegate is offered first (SUGGESTED); anyone else can be searched for.
+function DelegateModal({isOpen,onClose,onSubmit,stageName,delegateRole,procId,branchName,suggested}){
   const[comment,setComment]=useState("");
   const[query,setQuery]=useState("");
+  const sug=suggested||U.find(u=>u.role===delegateRole)||null;
   const[selected,setSelected]=useState(null);
+  useEffect(()=>{if(isOpen){setSelected(sug);setComment("");setQuery("");}},[isOpen]);
   if(!isOpen)return null;
-  // All users available for delegation, with the suggested role first
-  const filtered=U.filter(u=>!query||u.name.toLowerCase().includes(query.toLowerCase())||u.title.toLowerCase().includes(query.toLowerCase())||(u.branch||"").toLowerCase().includes(query.toLowerCase()));
-  const sorted=[...filtered].sort((a,b)=>(a.role===delegateRole?-1:b.role===delegateRole?1:0));
-  return<div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.45)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center"}}>
-    <div style={{background:"#fff",borderRadius:12,width:540,maxWidth:"92vw",maxHeight:"85vh",overflowY:"auto",boxShadow:"0 24px 48px rgba(0,0,0,0.15)"}}>
-      <div style={{padding:"20px 24px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-        <div>
-          <div style={{fontSize:16,fontWeight:700,color:T.text}}>Forward / Delegate</div>
-          <div style={{fontSize:11,color:T.textSec,marginTop:4}}>Stage: {stageName}</div>
-        </div>
+  const others=query.trim()?U.filter(u=>(!sug||u.email!==sug.email)&&(u.name.toLowerCase().includes(query.toLowerCase())||u.title.toLowerCase().includes(query.toLowerCase()))).slice(0,6):[];
+  const card=(u,tag)=>{const isSel=selected?.email===u.email;return <div key={u.email} onClick={()=>setSelected(u)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",cursor:"pointer",borderRadius:8,marginBottom:6,border:`1px solid ${isSel?T.purple:T.border}`,background:isSel?"#faf5ff":"#fff"}}>
+    <Av user={u} size={32}/>
+    <div style={{flex:1}}><div style={{fontSize:12.5,fontWeight:600}}>{u.name}</div><div style={{fontSize:10.5,color:T.textMut}}>{tag?`${stageName} · ${branchName||u.branch}`:`${u.title} · ${u.branch||"—"}`}</div></div>
+    {tag&&<span style={{fontSize:9,fontWeight:800,color:T.purple,background:"#f5f3ff",padding:"2px 7px",borderRadius:8,letterSpacing:0.4}}>SUGGESTED</span>}
+    {isSel&&<span style={{color:T.purple,fontSize:14,fontWeight:700}}>✓</span>}</div>;};
+  const ok=selected&&comment.trim();
+  return<div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.45)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={onClose}>
+    <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,width:540,maxWidth:"92vw",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 24px 48px rgba(0,0,0,0.15)"}}>
+      <div style={{padding:"18px 24px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div><div style={{fontSize:16,fontWeight:700,color:T.text}}>Forward / Delegate</div>
+          <div style={{fontSize:11,color:T.textSec,marginTop:4}}>{procId?procId+" · ":""}Stage: {stageName}{branchName?" · "+branchName:""}</div></div>
         <span onClick={onClose} style={{cursor:"pointer",fontSize:20,color:T.textMut,padding:4}}>✕</span>
       </div>
-      <div style={{padding:"20px 24px"}}>
+      <div style={{padding:"18px 24px"}}>
         <label style={lbl}>Forward to <span style={{color:T.err}}>*</span></label>
-        <input style={{...inp,marginBottom:8}} placeholder="Search by name, title, or branch..." value={query} onChange={e=>{setQuery(e.target.value);setSelected(null);}}/>
-        <div style={{fontSize:10,color:T.textMut,marginBottom:8}}>Can be any user across departments and branches (CEN ↔ NTH)</div>
-        <div style={{maxHeight:220,overflowY:"auto",border:`1px solid ${T.borderLight}`,borderRadius:6}}>
-          {sorted.length===0?<div style={{padding:16,textAlign:"center",color:T.textMut,fontSize:11}}>No users found</div>:
-          sorted.map(u=>{const isSel=selected?.email===u.email;const isSuggested=u.role===delegateRole;
-            return<div key={u.email} onClick={()=>setSelected(u)} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",cursor:"pointer",borderBottom:`1px solid ${T.borderLight}`,background:isSel?"#eef4ff":"#fff",borderLeft:isSel?`3px solid ${T.purple}`:"3px solid transparent"}}>
-              <Av user={u} size={32}/>
-              <div style={{flex:1}}>
-                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <div style={{fontSize:12,fontWeight:600}}>{u.name}</div>
-                  {isSuggested&&<span style={{fontSize:9,fontWeight:600,color:T.purple,background:"#faf5ff",padding:"1px 6px",borderRadius:3}}>SUGGESTED</span>}
-                </div>
-                <div style={{fontSize:10,color:T.textMut}}>{u.title} · {u.branch||"—"}</div>
-              </div>
-              {isSel&&<span style={{color:T.purple,fontSize:14,fontWeight:700}}>✓</span>}
-            </div>;})}
-        </div>
-        <div style={{marginTop:14}}>
+        {sug&&card(sug,true)}
+        {selected&&(!sug||selected.email!==sug.email)&&card(selected,false)}
+        <div style={{fontSize:11.5,fontWeight:700,color:T.textSec,margin:"10px 0 4px"}}>Or forward to somebody else</div>
+        <input style={{...inp,marginBottom:4}} placeholder="Search people…" value={query} onChange={e=>setQuery(e.target.value)}/>
+        <div style={{fontSize:10.5,color:T.textMut,marginBottom:6}}>Any user, across departments and both branches (CEN ↔ NTH).</div>
+        {others.map(u=><div key={u.email} onClick={()=>{setSelected(u);setQuery("");}} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",cursor:"pointer",borderBottom:`1px solid ${T.borderLight}`}}><Av user={u} size={24}/><span style={{fontSize:12,fontWeight:600}}>{u.name}</span><span style={{fontSize:10.5,color:T.textMut}}>{u.title} · {u.branch}</span></div>)}
+        <div style={{marginTop:12}}>
           <label style={lbl}>Comment / Instructions <span style={{color:T.err}}>*</span></label>
-          <textarea style={{...inp,height:70,resize:"vertical",fontFamily:T.font}} placeholder="Instructions or reason..." value={comment} onChange={e=>setComment(e.target.value)}/>
+          <textarea aria-label="What do you need them to fill in?" style={{...inp,height:70,resize:"vertical",fontFamily:T.font}} placeholder="What do you need them to fill in?" value={comment} onChange={e=>setComment(e.target.value)}/>
         </div>
-        <div style={{background:"#faf5ff",padding:10,borderRadius:6,marginTop:12,fontSize:11,color:T.purple,border:`1px solid ${T.purple}15`}}>
-          <strong>Flow:</strong> Delegate fills data → presses Confirm → returns to you for final decision (you remain responsible for approval)
+        <div style={{background:"#faf5ff",padding:10,borderRadius:6,marginTop:10,fontSize:11,color:T.purple,border:`1px solid ${T.purple}15`,lineHeight:1.5}}>
+          <strong>Flow:</strong> the delegate fills the data in → presses <strong>Confirm & Return to Primary</strong> → the request comes back to you for the final decision. You remain responsible for the approval, and the stage keeps its original due date.
         </div>
+        {!comment.trim()&&<div style={{fontSize:11,color:"#c2410c",marginTop:8}}>A comment is required — it is what tells the delegate what to fill in.</div>}
       </div>
-      <div style={{padding:"16px 24px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8}}>
+      <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8}}>
         <button onClick={onClose} style={{padding:"8px 18px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,cursor:"pointer",color:T.textSec,fontFamily:T.font}}>Cancel</button>
-        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
-          {(!selected||!comment.trim())&&<div style={{fontSize:10,color:T.textMut}}>{!selected?"Select a person":"Add a comment"} to enable</div>}
-          <button onClick={()=>{if(!selected){alert("Please select a user");return;}if(!comment.trim()){alert("Comments required");return;}onSubmit(selected,comment);}} disabled={!selected||!comment.trim()} style={{padding:"8px 18px",borderRadius:6,border:"none",background:selected&&comment.trim()?T.purple:"#e2e8f0",color:selected&&comment.trim()?"#fff":T.textMut,fontSize:12,fontWeight:600,cursor:selected&&comment.trim()?"pointer":"not-allowed",fontFamily:T.font}}>↗ Forward {selected?"to "+selected.name.split(" ")[0]:""}</button>
-        </div>
+        <button onClick={()=>ok&&onSubmit(selected,comment.trim())} disabled={!ok} style={{padding:"8px 18px",borderRadius:6,border:"none",background:ok?T.purple:"#e2e8f0",color:ok?"#fff":T.textMut,fontSize:12,fontWeight:600,cursor:ok?"pointer":"not-allowed",fontFamily:T.font}}>Forward to {selected?selected.name.split(" ").filter(w=>!/\.$/.test(w))[0]:"…"}</button>
       </div>
     </div>
   </div>;

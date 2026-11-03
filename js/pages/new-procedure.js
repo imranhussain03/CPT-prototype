@@ -109,10 +109,12 @@ function NewProcForm({onBack,me,onSubmit,onSaveDraft=()=>{},onDiscardDraft=()=>{
     {existAlert&&<Card style={{margin:"12px 0 16px",background:"#f8fafc",border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.warn}`}}>
       <div style={{display:"flex",alignItems:"center",gap:10}}><Ic n="alert" s={18} style={{color:T.warn}}/><div>
         <div style={{fontSize:13,fontWeight:600,color:T.warn}}>CPT Already Exists!</div>
-        <div style={{fontSize:11,color:T.textSec}}>"{existAlert.proposedCptName}" ({existAlert.proposedCptCode}) exists as Procedure #{existAlert.id}.</div>
+        <div style={{fontSize:11,color:T.textSec}}>“{existAlert.accurateCptName||existAlert.proposedCptName}” ({existAlert.proposedCptCode}) exists as {existAlert.id}.</div>
         <div style={{display:"flex",gap:8,marginTop:8}}>
           <button onClick={()=>nav("detail",existAlert)} style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${T.info}`,background:"#eff6ff",color:T.info,fontSize:11,fontWeight:600,cursor:"pointer"}}>View Details</button>
+          {existAlert.status==="approved"&&<button onClick={()=>{location.hash="#/edit/"+existAlert.id;}} style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${T.warn}`,background:"#fffbeb",color:"#b45309",fontSize:11,fontWeight:600,cursor:"pointer"}}>Submit Edit Request</button>}
         </div>
+        <div style={{fontSize:10.5,color:T.textMut,marginTop:6}}>You can still raise this request — the CMIO validates the CPT mapping at stage 3.</div>
       </div></div>
     </Card>}
     <Card style={{margin:"16px 0"}}>
@@ -163,6 +165,8 @@ function NewProcForm({onBack,me,onSubmit,onSaveDraft=()=>{},onDiscardDraft=()=>{
       <button onClick={onBack} style={btn}>Cancel</button>
       {fd.draftId&&<button onClick={()=>setAskDiscard(true)} style={{...btn,borderColor:T.err,color:T.err}}>Discard draft</button>}
       <button onClick={()=>{const id=onSaveDraft(payload());if(id){if(!fd.draftId)upd("draftId",id);setSavedAt(new Date().toLocaleTimeString("en-GB"));}}} style={btn}>{fd.draftId?"Save draft":"Save as draft"}</button>
+      {(()=>{const miss=[[!fd.specialty,"Specialty is required."],[!fd.cptName,"Proposed CPT Name is required."],[!fd.patientType,"Patient Type is required."],[!fd.anesthesia,"Anesthesia Requirement is required."],[!fd.gender,"Gender is required."],[!fd.opSkill,"Operation Skill is required."],[fd.accommodationDays==="","Accommodation Days is required."],[!fd.procedureDuration||/^0:0+$/.test(fd.procedureDuration),"Approximate Duration of Procedure is required."]].filter(x=>x[0]).map(x=>x[1]);
+        return miss.length&&savedAt?<span style={{fontSize:11,color:"#c2410c"}}>{miss[0]}{miss.length>1?` (+${miss.length-1} more)`:""}</span>:null;})()}
       <button onClick={()=>{if(validate())setStep("review");}} title={validate()?"":"Fill every required field: Specialty, CPT Name, Patient Type, Anesthesia, Gender, Operation Skill, Accommodation Days, Duration"} style={{padding:"9px 20px",borderRadius:6,border:"none",background:validate()?T.primary:"#94a3b8",color:"#fff",fontSize:12,fontWeight:600,cursor:validate()?"pointer":"not-allowed",fontFamily:T.font}}>Press Review →</button>
     </div>
   </div>;

@@ -229,13 +229,7 @@ function EditProc({proc:p,me,onBack,onSubmit,opSkills=OP_SKILLS_DEFAULT,categori
           </tbody>
         </table>
       </div>
-      {tplGrandTotal>0&&<div style={{padding:"12px 16px",background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",borderRadius:8,border:`2px solid ${T.ok}40`,marginTop:12}}>
-        <div style={{fontSize:10,color:T.ok,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,marginBottom:6}}>All Templates Total (Proc + Wards)</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr) auto",gap:8,alignItems:"center"}}>
-          {tplCards.map(c=>{const tot=c.items.reduce((s,i)=>s+(i.totalCost||0),0);return<div key={c.k} style={{padding:"4px 8px",fontSize:10}}><div style={{color:T.textMut,display:"flex",alignItems:"center",gap:4}}><Ic n={c.icon} s={10}/>{c.t}</div><div style={{fontSize:12,fontWeight:700,color:tot>0?T.primary:T.textMut}}>{fmtKWD(tot)}</div></div>;})}
-          <div style={{padding:"6px 14px",background:T.ok,borderRadius:6,color:"#fff",textAlign:"right"}}><div style={{fontSize:9,opacity:0.9}}>GRAND TOTAL</div><div style={{fontSize:15,fontWeight:800}}>{fmtKWD(tplGrandTotal)}</div></div>
-        </div>
-      </div>}
+      <AllTemplatesTotal templates={Object.fromEntries(tplCards.map(c=>[c.k,c.items]))} style={{marginBottom:8,marginTop:12}}/>
     </Card>
 
     <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:16}}>

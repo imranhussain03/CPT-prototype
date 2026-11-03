@@ -24,7 +24,7 @@ function ApprovedPage({procs,onSel,onEdit,vlReqs=[]}){
     <Card style={{padding:0,overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse"}}><thead><tr style={{background:T.primaryLight}}>
       <AP.TH k="id">Unique ID</AP.TH><AP.TH k="requestor">Requestor</AP.TH><AP.TH k="specialty">Specialty</AP.TH><AP.TH k="cpt">CPT Code</AP.TH><AP.TH k="cptname">CPT Name</AP.TH><AP.TH k="pkgid">PKGID</AP.TH><th style={{padding:"10px 12px",fontSize:10.5,fontWeight:800,color:T.textSec,textTransform:"uppercase",letterSpacing:0.4,textAlign:"left",borderBottom:`1px solid ${T.border}`}}>Template #s</th><AP.TH k="ver">Version</AP.TH><AP.TH k="vdate">Version Date</AP.TH><th style={{padding:"10px 12px",fontSize:10.5,fontWeight:800,color:T.textSec,textTransform:"uppercase",letterSpacing:0.4,textAlign:"left",borderBottom:`1px solid ${T.border}`}}>Status</th><th style={{borderBottom:`1px solid ${T.border}`}}/>
     </tr></thead><tbody>
-      {filtered.length===0&&<tr><td colSpan={10} style={{padding:40,textAlign:"center",color:T.textMut}}>No approved procedures</td></tr>}
+      {filtered.length===0&&<tr><td colSpan={10} style={{padding:40,textAlign:"center",color:T.textMut}}>{approved.length===0?"There are no packages yet.":"No packages match this view."}</td></tr>}
       {AP.sortRows(filtered,GA).map(p=><tr key={p.id} style={{borderBottom:`1px solid ${T.borderLight}`}} onMouseEnter={e=>e.currentTarget.style.background=T.primaryLight} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
         <td onClick={()=>onSel(p)} style={{padding:"10px 12px",fontSize:12,fontWeight:600,color:T.primary,cursor:"pointer"}}>{p.id}</td>
         <td onClick={()=>onSel(p)} style={{padding:"10px 12px",fontSize:12,cursor:"pointer"}}>{(p.requestor&&p.requestor.name)||"—"}</td>
@@ -74,10 +74,11 @@ function buildNotifs(procs,canAct,me,slaConfig,vlReqs=[]){
     if(mine&&p.status==="rejected"){const last=(p.timeline||[])[p.timeline.length-1]||{};
       out.push({id:`rj-${p.id}`,type:"alert",priority:"medium",ref:p.id,title:"Rejected",
         body:`${p.accurateCptName||p.proposedCptName} was rejected. The reviewer's comment is on the request's timeline.`,date:last.date||p.requestDate,proc:p,overdue:false});}
-    (p.reqDocs||[]).filter(d=>d.status==="pending").forEach(d=>{
+    // live: only the person asked is notified, in the "Document Requests" filter
+    (p.reqDocs||[]).filter(d=>d.status==="pending"&&(!d.notify||d.notify.email===me.email)).forEach(d=>{
       out.push({id:`doc-${p.id}-${d.id}`,type:"docreq",priority:"medium",ref:p.id,
         title:`Document requested — ${d.type}`,
-        body:`Asked by ${d.by} (${d.role}) on ${p.id}.`,quote:d.note?{by:d.by,text:d.note}:null,
+        body:<><strong>{d.type}</strong> has been requested from you by {d.by} for {p.accurateCptName||p.proposedCptName}{d.note?<> — “{d.note}”</>:null}. Open the Requested tab to attach it, or to say it is not available and why.</>,quote:null,
         date:d.date,proc:p,overdue:false,meta:null});
     });
     if(p.priceAlert&&me.role==="cfo"){
@@ -169,12 +170,24 @@ function MyTasks({procs,onSel,canAct,me,slaConfig,vlReqs=[],onOpenVl=()=>{}}){
   const[q,setQ]=useState("");
   const procRows=procs.filter(canAct).map(p=>{const sla=slaStateFor(p,slaConfig);
     const due=sla?addDays(null,sla.left):addDays(p.stageStartDate,3);
-    const todo=p.delegatedTo===me.email?"Fill in the forwarded step and return it":(p.status||"").indexOf("cpt_exists")===0?"Acknowledge":p.reassignedTo&&p.reassignedTo.email===me.email?"Covering for the approver while they are away":(TASK_TODO[p.currentStage]||"Review");
+    const last=(p.timeline||[])[(p.timeline||[]).length-1]||{};
+    const stdName=((APPROVAL_CONFIG_DEFAULT.find(c=>c.num===p.currentStage)||{}).approvers||{})[p.branch];
+    const todo=p.delegatedTo===me.email?<>Fill this stage in and return it to {p.delegatedByUser?.name||"the approver"} — they make the decision <span style={{color:"#c2410c",fontWeight:600}}>on behalf of {p.delegatedByUser?.name||"the approver"}</span></>:(p.status||"").indexOf("cpt_exists")===0?"Acknowledge":p.reassignedTo&&p.reassignedTo.email===me.email?<>Complete and submit on behalf of <span style={{color:"#c2410c",fontWeight:600}}>{p.reassignedTo.forName||stdName}</span></>:last.type==="delegate_confirm"?"Your delegate has handed the stage back":(TASK_TODO[p.currentStage]||"Review");
     return {key:"p"+p.id,id:p.id,spec:p.specialty,type:<TypeBadge p={p}/>,name:p.accurateCptName||p.proposedCptName,todo,due,open:()=>onSel(p)};});
   const vlRows=vlReqs.filter(r=>editTurn(r,me)).map(r=>{const b=procs.find(p=>p.id===r.baseId)||{};
     const todo=r.status==="returned"?"Amend the returned change and resubmit it":r.phase==="confirm"?"Confirm the change on PrimeCare — this applies it to the package":"Approve or reject a requested change to this package";
     return {key:"v"+r.id,id:r.baseId,sub:r.id,spec:b.specialty,type:<AmendBadge/>,name:r.cpt,todo,due:addDays(r.stageDate||r.date,3),open:()=>onOpenVl(r.id)};});
-  const all=[...procRows,...vlRows].filter(t=>!q||(t.id+(t.sub||"")+(t.name||"")+(t.spec||"")+t.todo).toLowerCase().includes(q.toLowerCase())).sort((a,b)=>a.due-b.due);
+  // Watch-items live also lists: things waiting on someone else that you are responsible for
+  const watchRows=[];
+  procs.forEach(p=>{const nm=p.accurateCptName||p.proposedCptName;const base={id:p.id,spec:p.specialty,type:<TypeBadge p={p}/>,name:nm,open:()=>onSel(p)};
+    const stdName=((APPROVAL_CONFIG_DEFAULT.find(c=>c.num===p.currentStage)||{}).approvers||{})[p.branch];
+    if(p.delegatedBy===me.email&&p.delegatedTo)watchRows.push({...base,key:"dg"+p.id,todo:"Forwarded to your delegate — waiting for them to fill it in",due:addDays(p.stageStartDate,3)});
+    if(p.reassignedTo&&p.reassignedTo.stage===p.currentStage&&p.reassignedTo.email!==me.email&&stdName===me.name)watchRows.push({...base,key:"cv"+p.id,todo:"Covered by somebody else while you are away",due:addDays(p.stageStartDate,3)});
+    (p.reqDocs||[]).forEach(d=>{if(d.status==="pending"&&d.notify&&d.notify.email===me.email)watchRows.push({...base,key:"dr"+p.id+d.id,todo:"Provide a document, or say it is unavailable",due:addDays(d.date,3)});
+      if(d.status!=="pending"&&d.by===me.name&&!d.seen)watchRows.push({...base,key:"db"+p.id+d.id,todo:"A document you asked for has come back",due:addDays(d.providedDate||d.date,3)});});
+    if(p.priceAlert&&me.role==="cfo"&&!p.priceAlertSeen)watchRows.push({...base,key:"pa"+p.id,todo:"Review the CEO’s price change",due:addDays(p.priceAlert.date,3)});
+  });
+  const all=[...procRows,...vlRows,...watchRows].filter(t=>!q||(t.id+(t.sub||"")+(t.name||"")+(t.spec||"")+t.todo).toLowerCase().includes(q.toLowerCase())).sort((a,b)=>a.due-b.due);
   const groups={overdue:all.filter(t=>dayDiff(t.due)<0),due:all.filter(t=>dayDiff(t.due)===0),upcoming:all.filter(t=>dayDiff(t.due)>0)};
   const cards=[
     {k:"overdue",l:"Overdue",c:T.err,icon:"alert",sub:"Action required immediately"},

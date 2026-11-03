@@ -61,29 +61,30 @@ function CliniPack(){
     const req={id,kind:fin?"fin":"nf",baseId:b.id,cpt:b.accurateCptName||b.proposedCptName,branch:b.branch,scenarios:scenIds,groupId:scenIds[0],groupName:lbl,changes,reason,
       ...(fin?{stages:rt.stages,stage:1}:{chain:rt.steps,confirmRole:rt.confirm,stage:0}),
       phase:(!fin&&!rt.steps.length)?"confirm":"approval",status:"pending",done:false,raisedBy:me.name,fromVer:b.version||1,toVer:(b.version||1)+1,date:td,stageDate:td,
-      timeline:[{by:me.name,action:`Amendment ${id} raised — ${lbl} — "${reason}"`,date:now()}]};
+      timeline:[{by:me.name,action:`Amendment ${id} raised — ${lbl} — “${reason}”`,date:now()}]};
     setVlReqs(prev=>[...prev,req]);
-    showToast(`${id} raised — ${fin?`re-running ${rt.total} stages as V${req.toVer}; V${req.fromVer} stays in force`:`routed to ${rt.steps[0]?rt.steps[0].name:"PrimeCare confirm"}`}`);
+    showToast(fin?`${id} raised — re-running ${rt.total} stages as V${req.toVer}; V${req.fromVer} stays in force.`:`${id} raised — one request, routed for approval.`);
     return id;
   };
   const actVl=(r,action,comment)=>{
-    const asAdmin=!editTurn(r,me)&&me.isSiteAdmin;const tag=asAdmin?" (as CPT-Admin)":"";const td=new Date().toISOString().slice(0,10);
+    const tag="";// live records an admin decision in the admin's own name, with no extra markerconst td=new Date().toISOString().slice(0,10);
     const up=fn=>setVlReqs(prev=>prev.map(x=>x.id!==r.id?x:fn(x)));
     const curLbl=x=>x.kind==="fin"?((x.stages[x.stage]||{}).full||(x.stages[x.stage]||{}).label):x.phase==="confirm"?`PrimeCare confirm (${x.confirmRole})`:((x.chain[x.stage]||{}).label||"Approver");
-    if(action==="reject"){up(x=>({...x,status:"rejected",done:true,phase:"done",timeline:[...x.timeline,{by:me.name,action:`${curLbl(x)} — Rejected${tag}${comment?": "+comment:""}`,date:now()}]}));showToast(`${r.id} rejected — package ${r.baseId} is unchanged`,"warn");return;}
-    if(action==="withdraw"){up(x=>({...x,status:"withdrawn",done:true,phase:"done",timeline:[...x.timeline,{by:me.name,action:`Withdrawn — package stays at V${x.fromVer}`,date:now()}]}));showToast(`${r.id} withdrawn — package returns to V${r.fromVer}`,"info");return;}
-    if(action==="return"){up(x=>({...x,status:"returned",phase:"returned",returnNote:{by:me.name,text:comment,date:td},timeline:[...x.timeline,{by:me.name,action:`${x.id} returned for changes — with ${x.raisedBy}${tag} — "${comment}"`,date:now()}]}));showToast(`${r.id} returned to ${r.raisedBy}`,"warn");return;}
-    if(action==="resubmit"){up(x=>({...x,status:"pending",phase:"approval",stage:x.kind==="fin"?1:0,stageDate:td,changes:comment&&comment.changes?comment.changes:x.changes,returnNote:null,timeline:[...x.timeline,{by:me.name,action:`${x.id} amended and sent round again — restarts at the first step`,date:now()}]}));showToast(`${r.id} resubmitted — restarts at the first step`);return;}
+    if(action==="reject"){up(x=>({...x,status:"rejected",done:true,phase:"done",timeline:[...x.timeline,{by:me.name,action:`${x.id} rejected${comment?` — “${comment}”`:""}`,date:now()}]}));showToast(`${r.id} rejected — package ${r.baseId} is unchanged`,"warn");return;}
+    if(action==="withdraw"){up(x=>({...x,status:"withdrawn",done:true,phase:"done",endDate:now(),timeline:[...x.timeline,{by:me.name,action:`Amendment V${x.toVer} withdrawn — package returned to V${x.fromVer}${comment?` — “${comment}”`:""}`,date:now()}]}));showToast(`Amendment V${r.toVer} withdrawn — ${r.baseId} is back at V${r.fromVer}.`,"info");return;}
+    if(action==="return"){up(x=>({...x,status:"returned",phase:"returned",returnNote:{by:me.name,text:comment,date:td},timeline:[...x.timeline,{by:me.name,action:`${x.id} returned for changes — with ${x.raisedBy}${tag} — “${comment}”`,date:now()}]}));showToast(`${r.id} returned for changes — it is with ${r.raisedBy}.`,"warn");return;}
+    if(action==="resubmit"){up(x=>({...x,status:"pending",phase:"approval",stage:x.kind==="fin"?1:0,stageDate:td,changes:comment&&comment.changes?comment.changes:x.changes,reason:comment&&comment.reason?comment.reason:x.reason,returnNote:null,timeline:[...x.timeline,{by:me.name,action:`${x.id} amended and resubmitted — back to the start of its chain${comment&&comment.reason?` — “${comment.reason}”`:""}`,date:now()}]}));showToast(`${r.id} resubmitted — it restarts at the first step of its route.`);return;}
+    if(action==="docreq"){const d=comment||{};up(x=>({...x,reqDocs:[...(x.reqDocs||[]),{id:"DOC-"+String((x.reqDocs||[]).length+1).padStart(3,"0"),type:d.type,note:d.note||"",by:me.name,date:td,status:"pending",notify:d.who}],timeline:[...x.timeline,{by:me.name,action:`Document requested — ${d.type} — from ${d.who?d.who.name:"—"}${d.note?` — “${d.note}”`:""}`,date:now()}]}));showToast(`Requested from ${d.who?d.who.name:"them"} — it is in their My Tasks and they are emailed. The amendment does not wait.`);return;}
     const x=vlReqs.find(q=>q.id===r.id);if(!x)return;const lbl=curLbl(x);const cm=comment?": "+comment:"";let nx,applyNow=false;
     if(x.kind==="fin"){
       if(x.stage>=x.stages.length-1){applyNow=true;nx={...x,phase:"done",status:"completed",done:true,timeline:[...x.timeline,{by:me.name,action:`${lbl} — Acknowledged${tag} — applied as V${x.toVer}`,date:now()}]};}
       else nx={...x,stage:x.stage+1,stageDate:td,timeline:[...x.timeline,{by:me.name,action:`${lbl} — Approved${tag}${cm}`,date:now()}]};}
-    else if(x.phase==="confirm"){applyNow=true;nx={...x,phase:"done",status:"completed",done:true,timeline:[...x.timeline,{by:me.name,action:`Confirmed on PrimeCare${tag} — applied as V${x.toVer}`,date:now()}]};}
-    else if(x.stage>=x.chain.length-1)nx={...x,phase:"confirm",stage:x.chain.length,stageDate:td,timeline:[...x.timeline,{by:me.name,action:`${lbl} — Approved${tag}${cm} · awaiting PrimeCare confirm`,date:now()}]};
-    else nx={...x,stage:x.stage+1,stageDate:td,timeline:[...x.timeline,{by:me.name,action:`${lbl} — Approved${tag}${cm} · sent to ${x.chain[x.stage+1].label}`,date:now()}]};
+    else if(x.phase==="confirm"){applyNow=true;nx={...x,phase:"done",status:"completed",done:true,timeline:[...x.timeline,{by:me.name,action:`Change ${x.id} applied (${x.groupName||editReqLabel(x)}) — Version ${x.toVer}`,date:now()}]};}
+    else if(x.stage>=x.chain.length-1)nx={...x,phase:"confirm",stage:x.chain.length,stageDate:td,timeline:[...x.timeline,{by:me.name,action:`${x.id} approved${tag} — awaiting PrimeCare confirm (${x.confirmRole})${comment?` — “${comment}”`:""}`,date:now()}]};
+    else nx={...x,stage:x.stage+1,stageDate:td,timeline:[...x.timeline,{by:me.name,action:`${x.id} approved${tag} — sent to ${x.chain[x.stage+1].label}${comment?` — “${comment}”`:""}`,date:now()}]};
     setVlReqs(prev=>prev.map(q=>q.id===x.id?nx:q));
-    if(applyNow){applyVl(x);showToast(`${x.id} applied — package ${x.baseId} is now V${x.toVer} · certificate issued`);}
-    else showToast(`Approved — ${editStepLabel(nx)}`);
+    if(applyNow){applyVl(x);showToast(`${x.id} applied — package ${x.baseId} is now V${x.toVer}.`);}
+    else showToast(`${x.id} approved.`);
   };
   const[approvalConfig,setApprovalConfig]=useState(APPROVAL_CONFIG_DEFAULT);
   const[chiefSurgeons,setChiefSurgeons]=useState(CHIEF_SURGEONS_DEFAULT);
@@ -256,18 +257,19 @@ function CliniPack(){
       const updated=prev.map(p=>{
         if(p.id!==proc.id)return p;
         const u={...p};
-        u.timeline=[...u.timeline,{ver:u.version||1,date:now(),action:data.actionLabel||action,user:me.name,role:me.title,type:action,comment:(data.comment||"").trim()||undefined}];
+        // these actions write their own (live-worded) timeline entry below
+        if(!["delegate","delegate_confirm","ack_cfo_exists","ack_cmo_exists"].includes(action))u.timeline=[...u.timeline,{ver:u.version||1,date:now(),action:data.actionLabel||action,user:me.name,role:me.title,type:action,comment:(data.comment||"").trim()||undefined}];
 
         // Attachments can be added at any step and travel with the request
         if(action==="attach"){u.attachments=data.attachments||[];return u;}
         // Admin override — directly flip lifecycle without the full Deactivation/Reactivation chain
         if(action==="admin_override"){u.lifecycle=data.lifecycle;return u;}
-        if(action==="reassign"){u.reassignedTo=data.reassignedTo;return u;}
+        if(action==="reassign"){u.reassignedTo=data.reassignedTo;showToast(`${(STAGES.find(s=>s.num===u.currentStage)||{}).label} is now covered by ${data.reassignedTo.name}. It is in their tasks, with the original due date.`);return u;}
         // #10 — document requests
-        if(action==="doc_request"){u.reqDocs=[...(u.reqDocs||[]),data.doc];return u;}
+        if(action==="doc_request"){u.reqDocs=[...(u.reqDocs||[]),data.doc];showToast(`${data.doc.type} requested from ${data.doc.notify?data.doc.notify.name:"them"}. It is in their tasks now.`,"info");return u;}
         if(action==="doc_fulfil"){u.reqDocs=(u.reqDocs||[]).map(d=>d.id===data.docId?{...d,status:"provided",files:data.files,providedBy:data.by,providedDate:data.date}:d);u.attachments=[...(u.attachments||[]),...(data.files||[])];return u;}
-        if(action==="doc_na"){u.reqDocs=(u.reqDocs||[]).map(d=>d.id===data.docId?{...d,status:"not_provided",naReason:data.reason,providedBy:data.by,providedDate:data.date}:d);return u;}
-        if(action==="reassign_clear"){u.reassignedTo=null;return u;}
+        if(action==="doc_na"){const dd=(u.reqDocs||[]).find(d=>d.id===data.docId)||{};u.reqDocs=(u.reqDocs||[]).map(d=>d.id===data.docId?{...d,status:"not_provided",naReason:data.reason,providedBy:data.by,providedDate:data.date}:d);showToast(`${dd.type||"Document"} marked unavailable, with your reason on the record.`,"info");return u;}
+        if(action==="reassign_clear"){u.reassignedTo=null;showToast("Cover cleared — the step is back with its configured approver.","info");return u;}
         if(action==="migration_complete"){
           u.migrationMeta={...(u.migrationMeta||{}),relatedPeople:data.relatedPeople||[],completed:true};
           u.attachments=[...(u.attachments||[]),...(data.attachments||[])];
@@ -279,9 +281,10 @@ function CliniPack(){
           u.delegatedTo=data.delegate.email; // Store actual user email, not role
           u.delegatedToUser=data.delegate;    // Full user object for display
           u.delegatedBy=me.email;             // Track who delegated for return trip
+          u.delegateComment=data.delegateComment||"";
           u.delegatedByUser={name:me.name,title:me.title,role:me.role,email:me.email,branch:me.branch};
-          u.timeline=[...u.timeline,{ver:u.version||1,date:now(),action:`Forwarded to ${data.delegate.name} (${data.delegate.title})`,user:me.name,role:me.title,type:"forward"}];
-          showToast(`↗ Forwarded to ${data.delegate.name}`,"info");
+          u.timeline=[...u.timeline,{ver:u.version||1,date:now(),action:`${(STAGES.find(s=>s.num===u.currentStage)||{}).label} — forwarded to ${data.delegate.name} to fill in`,comment:data.delegateComment||"",user:me.name,role:me.title,type:"forward"}];
+          showToast(`Forwarded to ${data.delegate.name}. It comes back to you for the decision.`,"info");
           return u;
         }
         if(action==="delegate_confirm"){
@@ -304,8 +307,9 @@ function CliniPack(){
           u.delegatedToUser=null;
           u.delegatedBy=null;
           u.delegatedByUser=null;
-          u.timeline=[...u.timeline,{ver:u.version||1,date:now(),action:`Delegate confirmed — returned to ${primaryName} for final action`,user:me.name,role:me.title,type:"complete"}];
-          showToast(`Confirmed — returned to ${primaryName}`);
+          {const stl=(STAGES.find(s=>s.num===u.currentStage)||{}).label;const cm=data.cmioData?` (CPT ${data.cmioData.accurateCptCode||u.proposedCptCode} — ${data.cmioData.accurateCptName||u.proposedCptName} ${data.cmioData.accurateCptCode&&data.cmioData.accurateCptCode!==u.proposedCptCode?"corrected":"unchanged"})`:"";
+          u.timeline=[...u.timeline,{ver:u.version||1,date:now(),action:`${stl} — delegate confirmed${cm}; returned to ${primaryName} for the final decision`,comment:(data.comment||"").trim()||undefined,user:me.name,role:me.title,type:"delegate_confirm"}];}
+          showToast(`Confirmed — returned to ${primaryName} for the final decision.`);
           return u;
         }
 
@@ -369,7 +373,9 @@ function CliniPack(){
           u.delegatedTo=null;
           u.reassignedTo=null;
           if(u.currentStage>15){u.status="approved";u.currentStage=16;}
-          showToast(`${data.actionLabel||"Approved"}`);
+          if(data.ceoPrice!=null&&u.financial)u.financial={...u.financial,ceoApproved:true};
+          {const nx=STAGES.find(s=>s.num===u.currentStage);const who=nx?approverFor(u.currentStage,u.branch,u.specialty):null;
+           showToast(nx?`Saved. Sent to ${nx.label}${who?" ("+who+")":""}.`:"Saved. This request is now closed.");}
         }else if(action==="reject"){
           u.status="rejected";showToast("Request rejected","err");
         }else if(action==="modify"){
@@ -398,17 +404,17 @@ function CliniPack(){
           showToast(`#${u.id} resubmitted — back with ${STAGES.find(s=>s.num===to)?.label}`);
         }else if(action==="acknowledge"){
           u.status="approved";u.currentStage=16;
-          showToast("Acknowledged — Version "+u.version+" active · certificate emailed to notified parties");
+          showToast("Acknowledged. This package is approved — its certificate is issued and emailed shortly afterwards.");
         }
         // CPT Exists acknowledgement chain
         else if(action==="ack_cfo_exists"){
           u.status="cpt_exists_cmo_ack";
-          u.timeline=[...u.timeline,{ver:u.version||1,date:now(),action:"CFO Acknowledged (CPT Exists)",user:me.name,role:"CFO",type:"acknowledge"}];
-          showToast("CFO Acknowledged — routed to CMO");
+          u.timeline=[...u.timeline,{ver:u.version||1,date:now(),action:"CPT Exists — CFO Acknowledgement — acknowledged",comment:(data.comment||"").trim()||undefined,user:me.name,role:"CFO",type:"acknowledge"}];
+          {const who=approverFor(2,u.branch,u.specialty);showToast(`Saved. Sent to CPT Exists — CMO Acknowledgement${who?" ("+who+")":""}.`);}
         }else if(action==="ack_cmo_exists"){
           u.status="cpt_exists";u.currentStage=16;
-          u.timeline=[...u.timeline,{ver:u.version||1,date:now(),action:"CMO Acknowledged (CPT Exists) — request closed",user:me.name,role:"CMO",type:"acknowledge"}];
-          showToast("CPT Exists — Acknowledged & closed");
+          u.timeline=[...u.timeline,{ver:u.version||1,date:now(),action:"CPT Exists — CMO Acknowledgement — acknowledged; request closed",comment:(data.comment||"").trim()||undefined,user:me.name,role:"CMO",type:"acknowledge"}];
+          showToast("Saved. This request is now closed.");
         }
         return u;
       });
@@ -467,7 +473,8 @@ function CliniPack(){
     if(a==="requests"&&b){const p=find(b);if(p){setDetailTab(c||null);return go("detail",p,"All Requests");}}
     if(a==="requests"){setAllFilter(q.get("status")||"all");return go("all");}
     if(a==="drafts"&&b){const p=find(b);return go("new",p&&p.status==="draft"?p:null,"New Procedure");}
-    if(a==="edit"&&b){const p=find(b);if(p)return go("edit",p,"Approved");}
+    // live: editing happens in place on the package, so old /edit links open the package in edit mode
+    if(a==="edit"&&b){const p=find(b);if(p){setAutoEdit(p.id);setDetailTab(null);return go("detail",p,"Approved");}}
     if(a==="edit-requests"&&b){setSelVl(b);return go("vl_detail",null,"Dashboard");}
     if(a==="deactivations"&&b){setSelDeact(b);return go("deact_detail",null,"Dashboard");}
     if(a==="setup"){setSetupSection(b||null);return go("setup");}
@@ -491,34 +498,8 @@ function CliniPack(){
       {toast&&<div style={{position:"fixed",top:60,right:20,zIndex:9999,padding:"12px 20px",borderRadius:8,background:toast.type==="ok"?T.ok:toast.type==="err"?T.err:toast.type==="info"?T.info:T.warn,color:"#fff",fontSize:13,fontWeight:600,boxShadow:"0 4px 20px rgba(0,0,0,0.15)",animation:"slideIn 0.3s ease"}}>{toast.msg}</div>}
       {deactRaise&&<DeactRaiseModal type={deactRaise.type} base={deactRaise.base} onClose={()=>setDeactRaise(null)} onSubmit={submitDeact}/>}
       {vlRaise&&<VlRaiseModal base={vlRaise} opSkills={opSkills} onClose={()=>setVlRaise(null)} onSubmit={submitVl}/>}
-      {/* SP HEADER */}
-      <div style={{height:48,background:T.headerBg,display:"flex",alignItems:"center",padding:"0 16px",justifyContent:"space-between",flexShrink:0}}>
-        <div style={{display:"flex",alignItems:"center",gap:14}}>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,5px)",gap:3,cursor:"pointer",padding:6}}>{[...Array(9)].map((_,i)=><div key={i} style={{width:5,height:5,borderRadius:"50%",background:"rgba(255,255,255,0.7)"}}/>)}</div>
-          <span style={{color:"#fff",fontSize:14,fontWeight:600}}>{APP.org}</span>
-          <div style={{display:"flex",alignItems:"center",background:"rgba(255,255,255,0.15)",borderRadius:4,padding:"5px 14px",marginLeft:20,width:260}}>
-            <span style={{color:"rgba(255,255,255,0.5)",fontSize:12}}>⌕ Search across sites</span>
-          </div>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:14}}>
-          <div style={{position:"relative"}} ref={userPickerRef}>
-            <div onClick={()=>setShowUserPicker(!showUserPicker)} style={{display:"flex",alignItems:"center",gap:8,background:"rgba(255,255,255,0.12)",borderRadius:8,padding:"5px 12px",cursor:"pointer",border:"1px solid rgba(255,255,255,0.15)"}}>
-              <Av user={me} size={26} color="#fff"/><div style={{lineHeight:1.2}}><div style={{color:"#fff",fontSize:11,fontWeight:600}}>{me.name}</div><div style={{color:"rgba(255,255,255,0.55)",fontSize:9}}>{me.title} · {me.branch}</div></div><span style={{color:"rgba(255,255,255,0.5)",fontSize:10,marginLeft:4}}>▾</span>
-            </div>
-            {showUserPicker&&<div style={{position:"absolute",top:"100%",right:0,marginTop:4,width:400,background:"#fff",borderRadius:10,boxShadow:"0 12px 40px rgba(0,0,0,0.2)",zIndex:9999,overflow:"hidden",border:`1px solid ${T.border}`}}>
-              <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,background:"#f8fafc"}}><div style={{fontSize:12,fontWeight:700,color:T.text}}>Switch User (Demo)</div><div style={{fontSize:10,color:T.textSec,marginTop:2}}>Select a user to view from their perspective</div></div>
-              <div style={{maxHeight:400,overflow:"auto"}}>
-                {ROLE_GROUPS.map(grp=>{const users=U.filter(u=>u.role===grp.role);if(!users.length)return null;return<div key={grp.role}>
-                  <div style={{padding:"8px 16px",background:"#f9fafb",fontSize:10,fontWeight:700,color:grp.color,textTransform:"uppercase",letterSpacing:0.5,borderBottom:`1px solid ${T.borderLight}`}}>{grp.label} ({users.length})</div>
-                  {users.map(u=><div key={u.id} onClick={()=>switchUser(u)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",cursor:"pointer",borderBottom:`1px solid ${T.borderLight}`,background:u.id===selUserId?T.primaryLight:"#fff"}} onMouseEnter={e=>{if(u.id!==selUserId)e.currentTarget.style.background="#f8fafc";}} onMouseLeave={e=>{if(u.id!==selUserId)e.currentTarget.style.background="#fff";}}>
-                    <Av user={u} size={30} color={grp.color}/><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:u.id===selUserId?700:500}}>{u.name}</div><div style={{fontSize:10,color:T.textMut}}>{u.title}</div></div><div style={{textAlign:"right",flexShrink:0}}><div style={{fontSize:9,color:T.textSec}}>{u.dept}</div><div style={{fontSize:9,color:T.textMut}}>{u.branch}</div></div>{u.id===selUserId&&<span style={{color:T.ok,fontSize:12,fontWeight:700}}>✓</span>}
-                  </div>)}
-                </div>;})}
-              </div>
-            </div>}
-          </div>
-        </div>
-      </div>
+      {/* SUITE BAR — SharePoint top bar (as on the live site) */}
+      <SuiteBar me={me} selUserId={selUserId} switchUser={switchUser}/>
       {/* SUBHEADER */}
       <div data-app-header="1" style={{height:52,background:"#fff",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",padding:"0 20px",gap:16,flexShrink:0}}>
         <img src={LOGO} alt={APP.orgFull} style={{height:38,width:"auto",display:"block",flexShrink:0}}/>
@@ -545,13 +526,8 @@ function CliniPack(){
       </div>
       {/* LAYOUT */}
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
-        <div style={{width:200,background:T.sidebarBg,borderRight:`1px solid ${T.border}`,flexShrink:0,paddingTop:8,position:"relative"}}>
-          <nav data-tour="sidebar">{sbItems.map((it,i)=><button key={i} onClick={()=>{setSbPage(it.label);setAllFilter("all");nav(it.v);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 16px",border:"none",background:sbPage===it.label?T.sidebarActive:"transparent",color:sbPage===it.label?T.primary:T.textSec,fontSize:13,fontWeight:sbPage===it.label?600:400,cursor:"pointer",textAlign:"left",fontFamily:T.font,borderLeft:sbPage===it.label?`3px solid ${T.primary}`:"3px solid transparent"}}><Ic n={it.icon} s={15}/>{it.label}{it.p2&&<P2Tag style={{marginLeft:"auto"}}/>}{it.badge>0&&<span style={{marginLeft:"auto",background:it.badgeColor||T.err,color:"#fff",fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:8}}>{it.badge}</span>}</button>)}</nav>
-          <div style={{position:"absolute",bottom:16,left:0,width:200,padding:"12px 16px",borderTop:`1px solid ${T.border}`}}>
-            <div style={{fontSize:11,fontWeight:600,color:T.text}}>{me.name}</div>
-            <div style={{fontSize:10,color:T.textMut}}>{me.title}</div>
-            <div style={{fontSize:10,color:T.textMut}}>{me.dept} · {me.branch}</div>
-          </div>
+        <div style={{width:186,background:T.sidebarBg,borderRight:`1px solid ${T.border}`,flexShrink:0,paddingTop:8,position:"relative"}}>
+          <nav data-tour="sidebar">{sbItems.map((it,i)=><button key={i} onClick={()=>{setSbPage(it.label);setAllFilter("all");nav(it.v);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"9px 14px 9px 15px",border:"none",background:sbPage===it.label?T.sidebarActive:"transparent",color:sbPage===it.label?T.primary:T.textSec,fontSize:13.5,fontWeight:sbPage===it.label?600:400,cursor:"pointer",textAlign:"left",fontFamily:T.font,borderLeft:sbPage===it.label?`3px solid ${T.primary}`:"3px solid transparent"}}><Ic n={it.icon} s={15}/>{it.label}{it.p2&&<P2Tag style={{marginLeft:"auto"}}/>}{it.badge>0&&<span style={{marginLeft:"auto",background:it.badgeColor||T.err,color:"#fff",fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:10,minWidth:22,textAlign:"center"}}>{it.badge}</span>}</button>)}</nav>
         </div>
         <div data-scroll-main="1" style={{flex:1,overflow:"auto",padding:24,scrollBehavior:"smooth"}}>
           {view==="dashboard"&&<Dashboard st={st} procs={visProcs} onSel={p=>nav("detail",p)} onNew={()=>nav("new")} me={me} role={role} canAct={canAct} deactReqs={deactReqs} onRaiseDeact={raiseDeact} onOpenDeact={openDeact} vlReqs={visVl} onOpenVl={openVl} onMyTasks={()=>{setSbPage("My Tasks");nav("mytasks");}} onDrafts={()=>{setAllFilter("draft");setSbPage("All Requests");nav("all");}} onGo={(v,f)=>{if(v==="all"){setAllFilter(f||"all");setSbPage("All Requests");}else if(v==="approved")setSbPage("Approved");else setSbPage("");nav(v);}}/>}
@@ -566,7 +542,7 @@ function CliniPack(){
             procs={allProcs} nav={nav} opSkills={opSkills} specialties={specialties} cptCodes={cptCodes}/>}
           {view==="approved"&&<ApprovedPage procs={visProcs} vlReqs={visVl} onSel={p=>nav("detail",p)} onEdit={p=>{setAutoEdit(p.id);nav("detail",p);}}/>}
           {view==="mytasks"&&<MyTasks procs={visProcs} onSel={p=>nav("detail",p)} canAct={canAct} me={me} slaConfig={slaConfig} vlReqs={visVl} onOpenVl={openVl}/>}
-          {view==="notifications"&&<NotificationsView notifs={notifs} me={me} read={readNotifs} onRead={ids=>setReadNotifs(prev=>[...new Set([...prev,...ids])])} onSel={p=>nav("detail",p)} onOpenVl={openVl}/>}
+          {view==="notifications"&&<NotificationsView notifs={notifs} me={me} read={readNotifs} onRead={ids=>{setReadNotifs(prev=>[...new Set([...prev,...ids])]);if(ids.length>1)showToast("All notifications marked as read.","info");}} onSel={p=>nav("detail",p)} onOpenVl={openVl}/>}
           {view==="in_approvals"&&<InApprovalsPage procs={visProcs} onSel={p=>nav("detail",p)} canAct={canAct} slaConfig={slaConfig}/>}
           {view==="detail"&&selProc&&<ProcDetail key={selProc.id} routeTab={detailTab} onTabChange={t=>setDetailTab(t)} proc={allProcs.find(p2=>p2.id===selProc.id)||selProc} role={role} me={me} onBack={()=>nav(selProc?.status==="approved"?"approved":"dashboard")} onAction={handleAction} canAct={canAct} nav={nav} categories={categories} onRaiseDeact={raiseDeact} onRaiseVl={raiseVl} onSubmitVl={(g,pl,r)=>submitVl(g,pl,r,allProcs.find(p2=>p2.id===selProc.id)||selProc)} onSubmitEdit={(ch,sc,rs)=>submitEdit(allProcs.find(p2=>p2.id===selProc.id)||selProc,ch,sc,rs)} onActVl={actVl} amendReq={amendId?vlReqs.find(r=>r.id===amendId):null} onAmendDone={()=>setAmendId(null)} autoEdit={autoEdit} onAutoEditDone={()=>setAutoEdit(null)} editDesign={editDesign} approvalConfig={approvalConfig} opSkills={opSkills} vlReqs={vlReqs.filter(r=>r.baseId===selProc.id)} onOpenVl={openVl} tplMasters={tplMasters}/>}
           {view==="deact_detail"&&<DeactDetail req={deactReqs.find(x=>x.id===selDeact)||{}} me={me} onBack={()=>nav("dashboard")} onAct={actDeact}/>}

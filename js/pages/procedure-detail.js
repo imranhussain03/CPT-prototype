@@ -13,7 +13,7 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
   const[editFlow,setEditFlow]=useState(null);
   const[efVals,setEfVals]=useState({});
   const[efPairs,setEfPairs]=useState([{old:"",new:""}]);
-  const[efReason,setEfReason]=useState("");
+  const[efReason,setEfReason]=useState("");const[wdWhy,setWdWhy]=useState("");
   const EF_TAB={clinical:"overview",cpt:"overview",pkg:"system",fees:"financial",opcode:"system",obsolete:"templates"};
   const efHide=editFlow&&editFlow.step!=="fields";
   const efTab=editFlow&&editFlow.group?EF_TAB[editFlow.group.id]||"overview":null;
@@ -77,6 +77,8 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
   const[tlPC,setTlPC]=useState(isEditVer?(ss.procConsTemplate||""):"");const[tlWC,setTlWC]=useState(isEditVer?(ss.wardsConsTemplate||""):"");const[tlPD,setTlPD]=useState(isEditVer?(ss.procDrugsTemplate||""):"");const[tlWD,setTlWD]=useState(isEditVer?(ss.wardsDrugsTemplate||""):"");const[tlDone,setTlDone]=useState("Yes");
 
   const[cbox,setCbox]=useState(null);
+  const[tlAll,setTlAll]=useState(false);
+  const[openRun,setOpenRun]=useState(null);
   const[pkgName,setPkgName]=useState(isEditVer?(ss.pkgName||""):"");
   const[nurSuggest,setNurSuggest]=useState(p.nursingSuggested||{});
   // FCD — every LOS list is costed per line (live)
@@ -158,9 +160,9 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
   const submitDocReq=()=>{
     const t=(drType||"").trim();
     if(!t){alert("Describe the document you need");return;}
-    const id="DOC-"+String(reqDocs.length+1).padStart(3,"0");
-    onAction(p,"doc_request",{actionLabel:`Document requested — ${t}${drNote?": "+drNote:""}${drNotify?" — notify "+drNotify.name:""}`,
-      doc:{id,type:t,note:drNote,notify:drNotify?{name:drNotify.name,email:drNotify.email}:null,by:me.name,role:me.title,date:new Date().toISOString().slice(0,10),status:"pending"}});
+    const id=p.id+"-DOC-"+String(reqDocs.length+1).padStart(3,"0");
+    onAction(p,"doc_request",{actionLabel:`Document requested — ${t}${drNotify?" from "+drNotify.name:""}`,comment:drNote,
+      doc:{id,type:t,note:drNote,notify:drNotify?{name:drNotify.name,email:drNotify.email}:null,by:me.name,role:STAGES.find(s=>s.num===p.currentStage)?.label||me.title,date:now(),status:"pending"}});
     setShowDocReq(false);setDrType("");setDrOther("");setDrNote("");setDrNotify(null);
   };
   const[showReassign,setShowReassign]=useState(false);
@@ -182,10 +184,12 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
         <ST style={{fontSize:15,marginBottom:4}}>Mark document unavailable</ST>
         <p style={{fontSize:11,color:T.textSec,margin:"0 0 12px"}}>{(reqDocs.find(x=>x.id===drNa)||{}).type} · requested by {(reqDocs.find(x=>x.id===drNa)||{}).by}</p>
         <label style={lbl}>Reason <span style={{color:T.err}}>*</span></label>
-        <textarea style={{...inp,height:64,resize:"vertical",fontFamily:T.font,marginBottom:16}} value={drNaReason} onChange={e=>setDrNaReason(e.target.value)} placeholder="e.g. Society has not published a protocol for this procedure" autoFocus/>
+        <textarea style={{...inp,height:64,resize:"vertical",fontFamily:T.font,marginBottom:6}} value={drNaReason} onChange={e=>setDrNaReason(e.target.value)} placeholder="e.g. The society has not published a protocol for this procedure" autoFocus/>
+        <div style={{fontSize:11,color:T.textSec,lineHeight:1.5,marginBottom:6}}>This is an answer, not a failure — it closes the request and goes to the approver who asked, with your reason, for them to decide on.</div>
+        {!drNaReason.trim()&&<div style={{fontSize:11,color:"#c2410c",marginBottom:12}}>A reason is required — it is what the approver has to decide on.</div>}
         <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
           <button onClick={()=>{setDrNa(null);setDrNaReason("");}} style={{padding:"8px 18px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",color:T.textSec}}>Cancel</button>
-          <button onClick={()=>{if(!drNaReason.trim()){alert("Reason is required");return;}const d=reqDocs.find(x=>x.id===drNa);onAction(p,"doc_na",{actionLabel:`${d.type} marked unavailable: ${drNaReason}`,docId:drNa,reason:drNaReason,by:me.name,date:new Date().toISOString().slice(0,10)});setDrNa(null);setDrNaReason("");}} style={{padding:"8px 18px",borderRadius:6,border:"none",background:T.textSec,color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Mark unavailable</button>
+          <button onClick={()=>{if(!drNaReason.trim()){alert("Reason is required");return;}const d=reqDocs.find(x=>x.id===drNa);onAction(p,"doc_na",{actionLabel:`${d.type} marked unavailable`,comment:drNaReason,docId:drNa,reason:drNaReason,by:me.name,date:now()});setDrNa(null);setDrNaReason("");}} style={{padding:"8px 18px",borderRadius:6,border:"none",background:T.textSec,color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Mark unavailable</button>
         </div>
       </div>
     </div>}
@@ -301,14 +305,15 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
         </div>
       </React.Fragment>}
     </Card>}
-    {!efHide&&<div data-tour="tracker">{openReq&&openReq.kind==="fin"&&openReq.status!=="returned"
+    {!efHide&&<div data-tour="tracker">{(()=>{const lastFin=!openReq&&p.status==="approved"&&vlReqs.find(r=>r.kind==="fin"&&r.done&&r.status==="completed"&&r.toVer===(p.version||1));
+      return lastFin?<WfTracker stages={lastFin.stages.map((s,i)=>({num:i+1,label:s.label,sla:s.sla}))} cur={lastFin.stages.length}/>:null;})()||(openReq&&openReq.kind==="fin"&&openReq.status!=="returned"
       ?<WfTracker stages={openReq.stages.map((s,i)=>({num:i+1,label:s.label,sla:s.sla}))} cur={openReq.stage}/>
-      :<WfTracker stages={(p.cptStatus==="Exists"?EXIST_STAGES:STAGES).map(s=>s.num===6?{...s,label:"Chief Surgeon — "+(p.specialty||"Specialty")}:s)} cur={p.cptStatus==="Exists"?3:stCur}/>}</div>}
+      :<WfTracker stages={(p.cptStatus==="Exists"?EXIST_STAGES:STAGES).map(s=>s.num===6?{...s,label:"Chief Surgeon — "+(p.specialty||"Specialty")}:s)} cur={p.cptStatus==="Exists"?(p.status==="cpt_exists_cmo_ack"?4:p.status==="cpt_exists"?5:p.status==="cpt_exists_cfo_ack"?3:stCur):stCur}/>)}</div>}
     {/* LIVE PARITY — editing header: change summary + the route it will take */}
     {editFlow&&editFlow.all&&<div style={{margin:"12px 0 14px",border:`1px solid ${T.primary}55`,borderRadius:10,overflow:"hidden",background:"#fff"}}>
       <div style={{background:T.primary,color:"#fff",padding:"10px 16px",display:"flex",alignItems:"center",gap:12}}>
         <Ic n="pencil" s={15}/>
-        <div style={{flex:1}}><div style={{fontSize:14,fontWeight:700}}>{amending?`Amending ${amending.id} · `:"Editing "}{p.id} · V{p.version||1} → V{(p.version||1)+1}</div><div style={{fontSize:11,opacity:0.9}}>Change any field where you see it — every tab is editable. The approval route builds itself from what you change.</div></div>
+        <div style={{flex:1}}><div style={{fontSize:14,fontWeight:700}}>{amending?`Amending ${amending.id} (returned) · ${p.id}`:`Editing ${p.id} · V${p.version||1} → V${(p.version||1)+1}`}</div><div style={{fontSize:11,opacity:0.9}}>{amending?"Adjust what the approver asked for — the fields of this request are editable, and every change it carries is kept. It restarts at the first step of its route.":"Change any field where you see it — every tab is editable. The approval route builds itself from what you change."}</div></div>
         <button onClick={()=>{setEditFlow(null);setAmending(null);}} style={{padding:"6px 14px",borderRadius:6,border:"1px solid rgba(255,255,255,0.6)",background:"transparent",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:T.font}}>Cancel edit</button>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr"}}>
@@ -329,26 +334,29 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
       </div>
     </div>}
     {/* LIVE PARITY — an open amendment on this package */}
-    {!editFlow&&openReq&&(()=>{const r=openReq;const fin=r.kind==="fin";const {stages:st2,cur:c2}=editTrackerOf(r);const s=editStatusOf(r);
+    {openReq&&(!editFlow||amending)&&(()=>{const r=openReq;const fin=r.kind==="fin";const {stages:st2,cur:c2}=editTrackerOf(r);const s=editStatusOf(r);
       if(fin&&r.status!=="returned")return <div style={{margin:"12px 0 14px",padding:"14px 18px",borderRadius:10,background:"#fffbeb",border:"1px solid #fde68a",display:"flex",gap:14,alignItems:"flex-start"}}>
         <Ic n="pencil" s={16} style={{color:"#b45309",marginTop:2}}/>
         <div style={{flex:1}}><div style={{fontSize:14,fontWeight:700,color:"#92400e"}}>Amendment V{r.toVer} in approval <span style={{fontSize:11,fontWeight:600,color:T.textSec}}>· {r.id} · {editStepLabel(r)}</span></div>
           <div style={{fontSize:11.5,color:T.textSec,margin:"2px 0 8px"}}>V{r.fromVer} stays approved and in force until this amendment completes. If it is rejected or withdrawn, the package returns to V{r.fromVer}.</div>
-          <div style={{fontSize:11,fontWeight:700,color:T.text,marginBottom:3}}>What this amendment changes</div>
-          {r.changes.map((c,i)=><div key={i} style={{fontSize:11.5}}><strong>{c.l}</strong> <span style={{color:T.textMut,textDecoration:"line-through"}}>{c.from}</span> → <span style={{color:T.ok,fontWeight:700}}>{c.to}</span></div>)}</div>
+          <div style={{fontSize:11,fontWeight:700,color:T.text,marginBottom:4}}>What this amendment changes</div>
+          {["overview","templates","financial","system"].filter(t=>r.changes.some(c=>(c.tab||"financial")===t)).map(t=>{const rows=r.changes.filter(c=>(c.tab||"financial")===t);return <div key={t} style={{marginBottom:6}}>
+            <div style={{fontSize:10,fontWeight:800,color:"#92400e",letterSpacing:0.5,marginBottom:2}}>{TAB_LBL[t].toUpperCase()} ({rows.length})</div>
+            <table style={{borderCollapse:"collapse",background:"#fff",borderRadius:6,minWidth:420}}><thead><tr>{["Field","Previous","New"].map(h=><th key={h} style={{padding:"4px 10px",fontSize:9.5,fontWeight:700,color:T.textMut,textAlign:"left",textTransform:"uppercase",letterSpacing:0.4,borderBottom:`1px solid ${T.border}`}}>{h}</th>)}</tr></thead>
+              <tbody>{rows.map((c,i)=><tr key={i} style={{borderTop:`1px solid ${T.borderLight}`}}><td style={{padding:"4px 10px",fontSize:11.5,fontWeight:600}}>{c.l}</td><td style={{padding:"4px 10px",fontSize:11.5,color:T.textMut}}>{c.from||"—"}</td><td style={{padding:"4px 10px",fontSize:11.5,fontWeight:700,color:T.ok}}>{c.to||"—"}</td></tr>)}</tbody></table></div>;})}</div>
         <div style={{display:"flex",flexDirection:"column",gap:6}}><button onClick={()=>onOpenVl(r.id)} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.primary}55`,background:"#fff",color:T.primary,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>Open request →</button>
-          {r.raisedBy===me.name&&<button onClick={()=>{if(window.confirm(`Withdraw ${r.id}? The package returns to V${r.fromVer}.`))onActVl(r,"withdraw");}} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",color:T.textSec,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Withdraw amendment</button>}</div>
+          {(r.raisedBy===me.name||me.isSiteAdmin)&&r.stage<9&&<button onClick={()=>{setWdWhy("");setCbox({kind:"withdraw",r});}} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",color:T.textSec,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Withdraw amendment</button>}</div>
       </div>;
       return <div style={{margin:"12px 0 14px",padding:"14px 18px",borderRadius:10,background:"#f5f9ff",border:`1px solid ${T.info}40`,borderLeft:`3px solid ${T.info}`}}>
         <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"flex-start"}}>
           <div><div style={{fontSize:13.5,fontWeight:700,color:T.info}}><Ic n="pencil" s={13}/> {r.id} · {editReqLabel(r)} <span style={{fontSize:11.5,fontWeight:600,color:T.textSec}}>{r.status==="returned"?<span>Returned for changes — with <strong>{r.raisedBy}</strong></span>:editStepLabel(r)}</span></div>
             <div style={{fontSize:11.5,color:T.textSec,marginTop:3}}>{r.changes.map(c=>`${c.l}: ${c.from||"—"} → ${c.to||"—"}`).join(" · ")}</div></div>
           <div style={{display:"flex",gap:6,flexShrink:0}}><button onClick={()=>onOpenVl(r.id)} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.info}55`,background:"#fff",color:T.info,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>Open request →</button>
-            {r.status==="returned"&&r.raisedBy===me.name&&<button onClick={()=>{startEdit(r.changes);setEfReason(r.reason||"");setAmending(r);}} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.warn}`,background:"#fff",color:"#b45309",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>Amend & resubmit →</button>}</div>
+            {r.status==="returned"&&r.raisedBy===me.name&&<button onClick={()=>{startEdit(r.changes);setEfReason("");setAmending(r);}} style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.warn}`,background:"#fff",color:"#b45309",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>Amend & resubmit →</button>}</div>
         </div>
         <div style={{margin:"10px 0 6px",background:"#fff",borderRadius:8}}><WfTracker stages={st2} cur={c2}/></div>
         <div style={{fontSize:11.5,color:T.textSec}}>{r.status==="returned"?<span><strong>Returned for changes</strong> to {r.raisedBy}. It is not with an approver — it is waiting to be amended and sent round again. </span>:<span>Raised by {r.raisedBy} · {fmtDate(r.date)}. </span>}This package stays <strong>approved at V{p.version}</strong> {r.status==="returned"?"and is unaffected.":"until the change is confirmed on PrimeCare — nothing has changed on it yet."}</div>
-        {r.returnNote&&r.status==="returned"&&<div style={{marginTop:8,padding:"7px 12px",background:"#fffbeb",borderRadius:6,fontSize:11.5,color:"#92400e"}}><strong>{r.returnNote.by} asked:</strong> "{r.returnNote.text}"</div>}
+        {r.returnNote&&r.status==="returned"&&<div style={{marginTop:8,padding:"7px 12px",background:"#fffbeb",borderRadius:6,fontSize:11.5,color:"#92400e"}}><strong>{r.returnNote.by} asked:</strong> “{r.returnNote.text}”</div>}
       </div>;})()}
     {/* Delegation banner */}
     {p.delegatedTo&&p.delegatedToUser&&<div style={{padding:"10px 16px",background:"linear-gradient(135deg,#faf5ff,#fff)",border:`2px solid ${T.purple}40`,borderRadius:10,marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
@@ -356,13 +364,14 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
         <span style={{fontSize:22}}>🔄</span>
         <div>
           <div style={{fontSize:13,fontWeight:700,color:T.purple}}>Currently Delegated</div>
-          <div style={{fontSize:11,color:T.textSec,marginTop:2}}>
-            <strong>{p.delegatedByUser?.name}</strong> ({p.delegatedByUser?.title}) → forwarded to <strong>{p.delegatedToUser.name}</strong> ({p.delegatedToUser.title})
+          <div style={{fontSize:11.5,color:T.textSec,marginTop:2}}>
+            <strong>{p.delegatedByUser?.name}</strong> forwarded {stageDef?.label} to <strong>{p.delegatedToUser.name}</strong> to fill in. The decision returns to {p.delegatedByUser?.name}.
           </div>
+          {p.delegateComment&&<div style={{marginTop:6}}><div style={{fontSize:9.5,fontWeight:800,letterSpacing:0.5,color:T.purple}}>DELEGATION COMMENT</div><div style={{fontSize:11.5,color:T.text}}>“{p.delegateComment}”</div></div>}
         </div>
       </div>
       <div style={{fontSize:10,fontWeight:600,color:T.purple,padding:"4px 10px",background:"#fff",borderRadius:12,border:`1px solid ${T.purple}40`}}>
-        {p.delegatedTo===me.email?"Your turn to fill":"Awaiting delegate"}
+        {p.delegatedTo===me.email?"Your turn to fill":p.delegatedBy===me.email?"Awaiting your delegate":"Awaiting delegate"}
       </div>
     </div>}
     {/* EDIT TYPE CHOOSER (E1) — inline, embedded in the screen */}
@@ -405,11 +414,11 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
       const _modal=(p.currentStage===15||p.status==="cpt_exists_cfo_ack"||p.status==="cpt_exists_cmo_ack");
       const _go=()=>{
         if(p.currentStage===15){setShowActionModal("acknowledge");return;}
-        if(p.status==="cpt_exists_cfo_ack"||p.status==="cpt_exists_cmo_ack"){setShowActionModal("ack_exists");return;}
+        if(p.status==="cpt_exists_cfo_ack"||p.status==="cpt_exists_cmo_ack"){onAction(p,p.status==="cpt_exists_cfo_ack"?"ack_cfo_exists":"ack_cmo_exists",{});return;}
         setTab(actionTab);
         setTimeout(()=>{if(actionRef.current)actionRef.current.scrollIntoView({behavior:"smooth",block:"start"});},60);
       };
-      const _ask=(STAGE_BANNER[p.currentStage]&&!(p.status||"").startsWith("cpt_exists"))?STAGE_BANNER[p.currentStage]:p.currentStage===15?"Acknowledge the final approval":((p.status||"").indexOf("cpt_exists")===0?"Review & acknowledge the existing CPT":(actionTab==="templates"?"Build the OT templates and validate LOS & Services":(actionTab==="financial"?"Enter and submit the financial details":(actionTab==="system"?"Enter the PrimeCare system codes":"Review this request and record your decision"))));
+      const _ask=(STAGE_BANNER[p.currentStage]&&!(p.status||"").startsWith("cpt_exists"))?STAGE_BANNER[p.currentStage]:p.currentStage===15?"Acknowledge the final approval":((p.status||"").indexOf("cpt_exists")===0?(p.status==="cpt_exists_cmo_ack"?"A CPT for this procedure already exists and the CFO has acknowledged — acknowledge from the bar at the bottom to close this request.":"A CPT for this procedure already exists — review the CMIO’s validation in Overview, then acknowledge from the bar at the bottom."):(actionTab==="templates"?"Build the OT templates and validate LOS & Services":(actionTab==="financial"?"Enter and submit the financial details":(actionTab==="system"?"Enter the PrimeCare system codes":"Review this request and record your decision"))));
       const _noNav=true;
       const _btn=_modal?"Acknowledge →":("Go to "+_tl+" →");
       return <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,flexWrap:"wrap",background:T.cardBg,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 18px",marginBottom:16,boxShadow:"0 2px 12px rgba(15,23,42,0.06)"}}>
@@ -452,17 +461,27 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
     </div>}
 
     {/* ═══ OVERVIEW TAB — Item Evaluation layout ═══ */}
-    {p.version>1&&p.editDiff&&p.editDiff.items&&p.editDiff.items.length>0&&tab==="overview"&&<Card style={{marginBottom:14,padding:14,background:"#fffbeb",border:`1px solid ${T.warn}60`}}>
-      <div style={{fontSize:12,fontWeight:700,color:"#92400e",marginBottom:6}}>✎ Changes in this version (V{p.version} vs V{p.editDiff.fromVersion})</div>
-      <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-        <thead><tr style={{background:"#fff"}}><th style={{...th,textAlign:"left"}}>Field</th><th style={{...th,textAlign:"left"}}>Previous</th><th style={{...th,textAlign:"left"}}>New</th></tr></thead>
-        <tbody>{p.editDiff.items.map((c,i)=><tr key={i} style={{borderTop:`1px solid ${T.borderLight}`}}>
-          <td style={{...td,textAlign:"left",fontWeight:600}}>{c.label}</td>
-          <td style={{...td,textAlign:"left",color:T.err,textDecoration:"line-through"}}>{c.old}</td>
-          <td style={{...td,textAlign:"left",color:T.ok,fontWeight:600}}>{c.new}</td>
-        </tr>)}</tbody>
-      </table>
-    </Card>}
+    {p.version>1&&p.editDiff&&p.editDiff.items&&p.editDiff.items.length>0&&tab==="overview"&&(()=>{const it=p.editDiff.items;
+      const SECS=[["fields","Fields","fileText"],["los","LOS & services","users"],["templates","OT templates","clipboard"],["financials","Financials","coins"],["system","System setup","building"]];
+      const n=it.reduce((x,c)=>x+(c.added||c.removed?(c.added||[]).length+(c.removed||[]).length:1),0);
+      const hdr={fontSize:10.5,fontWeight:800,letterSpacing:0.5,color:T.textSec,textTransform:"uppercase",margin:"12px 0 6px",display:"flex",alignItems:"center",gap:6};
+      return <Card style={{marginBottom:14,padding:"14px 18px",background:"#fffbeb",border:`1px solid ${T.warn}60`}}>
+        <div style={{display:"flex",alignItems:"baseline",gap:10}}><span style={{fontSize:13,fontWeight:700,color:"#92400e"}}>✎ Changes in this version (V{p.version} vs V{p.editDiff.fromVersion})</span><span style={{fontSize:11,color:T.textMut}}>{n} change{n===1?"":"s"} · review before approving</span></div>
+        {SECS.map(([k,l,ic])=>{const rows=it.filter(c=>(c.sec||"fields")===k);if(!rows.length)return null;
+          return <div key={k}><div style={hdr}><Ic n={ic} s={12}/>{l} <span style={{fontWeight:600,color:T.textMut}}>({rows.length})</span></div>
+            {rows.some(c=>c.added||c.removed)?rows.map((c,i)=><div key={i} style={{marginBottom:6}}><div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:2}}>{c.label}</div>
+                {(c.added||[]).map((x,j)=><div key={"a"+j} style={{fontSize:11.5}}><span style={{fontSize:9.5,fontWeight:800,color:T.ok,marginRight:8}}>ADDED</span>{x}</div>)}
+                {(c.removed||[]).map((x,j)=><div key={"r"+j} style={{fontSize:11.5,color:T.textMut}}><span style={{fontSize:9.5,fontWeight:800,color:T.err,marginRight:8}}>REMOVED</span><span style={{textDecoration:"line-through"}}>{x}</span></div>)}</div>)
+            :<table style={{width:"100%",borderCollapse:"collapse",fontSize:11.5}}>
+              {k==="fields"&&<thead><tr>{["Field","Previous","New"].map(h=><th key={h} style={{...th,textAlign:"left",background:"transparent"}}>{h}</th>)}</tr></thead>}
+              <tbody>{rows.map((c,i)=><tr key={i} style={{borderTop:`1px solid ${T.borderLight}`}}>
+                <td style={{...td,textAlign:"left",fontWeight:600,width:"34%"}}>{c.label}</td>
+                <td style={{...td,textAlign:"left",color:T.err,textDecoration:"line-through"}}>{c.old}</td>
+                {k!=="fields"&&<td style={{...td,width:24,color:T.textMut}}>→</td>}
+                <td style={{...td,textAlign:"left",color:T.ok,fontWeight:600}}>{c.new}</td></tr>)}</tbody></table>}
+          </div>;})}
+        <div style={{fontSize:10.5,color:T.textMut,marginTop:10}}>The patient price is deliberately not listed here. A price change lives in the restricted financial record and is reviewed at the CFO and CEO stages, by the people permitted to see it — this card is on a tab that everyone involved can read.</div>
+      </Card>;})()}
     {tabView==="overview"&&<div>
       {p.migrated&&(()=>{const mm=p.migrationMeta||{};
         return <Card style={{marginBottom:16,padding:0,overflow:"hidden"}}>
@@ -511,7 +530,7 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
       <Card style={{padding:24,marginBottom:20}}>
         <ST style={{fontSize:15,color:T.primary,marginBottom:12}}>Request information</ST>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",columnGap:36}}>
-          {[{l:"Request ID",v:p.id},{l:"Created",v:fmtDateTime(p.requestDate)},{l:"Created by",v:p.requestor?.name},{l:"Branch",v:BRANCHES.find(b=>b.code===p.branch)?.name||p.branch},{l:"Specialty",v:p.specialty},{l:"CPT Code",v:p.accurateCptCode||p.proposedCptCode||"—"},{l:"CPT Name",v:p.accurateCptName||p.proposedCptName},{l:"CPT Status",v:p.cptStatus||"Pending"},{l:"Patient Type",v:p.patientType||"—"},{l:"Anesthesia Requirement",v:p.anesthesia||"—"},{l:"Gender",v:p.gender||"—"},{l:"Operation Skill",v:p.opSkill||"—"},{l:"Suggested Price",v:fmtKWD(p.suggestedPrice)},{l:"Version",v:"V"+p.version}].map((f,i)=>
+          {[{l:"Request ID",v:p.id},{l:"Created",v:fmtDateTime(p.requestDate)},{l:"Created by",v:p.requestor?.name},...(p.version>1&&(p.versionHistory||[]).length?[(()=>{const v=p.versionHistory[p.versionHistory.length-1];return {l:`V${p.version} raised by`,v:`${v.changedBy} · ${fmtDateTime(v.date)}`};})()]:[]),{l:"Branch",v:BRANCHES.find(b=>b.code===p.branch)?.name||p.branch},{l:"Specialty",v:p.specialty},{l:"CPT Code",v:p.accurateCptCode||p.proposedCptCode||"—"},{l:"CPT Name",v:p.accurateCptName||p.proposedCptName},{l:"CPT Status",v:p.cptStatus||"Pending"},{l:"Patient Type",v:p.patientType||"—"},{l:"Anesthesia Requirement",v:p.anesthesia||"—"},{l:"Gender",v:p.gender||"—"},{l:"Operation Skill",v:p.opSkill||"—"},{l:"Suggested Price",v:fmtKWD(p.suggestedPrice)},{l:"Version",v:"V"+p.version}].map((f,i)=>
             <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,padding:"7px 0",borderBottom:`1px solid ${T.borderLight}`}}>
               <span style={{fontSize:12,color:T.textSec}}>{f.l}</span>
               {(EFK_INFO[f.l]&&efEdit(EFK_INFO[f.l]))||<span style={{fontSize:12,fontWeight:500,color:T.text,textAlign:"right",maxWidth:"60%"}}>{f.v||"—"}</span>}
@@ -636,9 +655,9 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
       </Card>}
 
       {/* Routing & assignment — three columns under At a Glance (live) */}
-      {(()=>{const total=p.cptStatus==="Exists"?3:15;const done=p.status==="approved"||p.status==="cpt_exists";const step=Math.min(p.currentStage>15?total:p.currentStage,total);const pct=done?100:Math.min(100,Math.round(((step-1)/total)*100));
+      {(()=>{const exA=p.status==="cpt_exists_cfo_ack"?4:p.status==="cpt_exists_cmo_ack"?5:0;const total=p.cptStatus==="Exists"&&(exA||p.status==="cpt_exists")?5:15;const done=p.status==="approved"||p.status==="cpt_exists";const step=exA||Math.min(p.currentStage>15?total:p.currentStage,total);const pct=done?100:Math.min(100,Math.round(((step-1)/total)*100));
         const who=p.reassignedTo&&p.reassignedTo.stage===p.currentStage?p.reassignedTo.name:p.delegatedToUser?p.delegatedToUser.name:p.currentStage===1?(p.requestor||{}).name:((APPROVAL_CONFIG_DEFAULT.find(c=>c.num===p.currentStage)||{}).approvers||{})[p.branch];
-        const sd=(SLA_CONFIG_DEFAULT.find(c=>c.num===p.currentStage)||{}).slaDays;const due=sd&&!done&&!["draft","rejected"].includes(p.status)?addDays(p.stageStartDate,sd):null;
+        const sd=(SLA_CONFIG_DEFAULT.find(c=>c.num===p.currentStage)||{}).slaDays;const due=sd&&!done&&!["draft","rejected"].includes(p.status)?addWorkDays(p.stageStartDate,sd):null;
         const H=({c,children})=><div style={{fontSize:11,fontWeight:800,color:c,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>{children}</div>;
         const box={padding:"12px 14px",background:"#f8fafc",border:`1px solid ${T.borderLight}`,borderRadius:8,minHeight:56};
         return <Card style={{padding:24,marginBottom:20}}>
@@ -649,8 +668,8 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
                 <div><div style={{fontSize:13,fontWeight:600,color:T.text}}>{(p.requestor||{}).name}</div><div style={{fontSize:11,color:T.textMut}}>{BRANCHES.find(b=>b.code===p.branch)?.name||p.branch}</div></div></div></div>
             <div><H c={T.ok}>Current stage</H>
               <div style={{...box,background:isMy?"#fffbeb":"#fff",border:`1px solid ${isMy?T.warn+"55":T.border}`}}>
-                <div style={{fontSize:13,fontWeight:600,color:T.text}}>{p.status==="draft"?"Draft — not submitted":p.status==="rejected"?"Rejected":done?"Completed":stageDef?.label}</div>
-                <div style={{fontSize:11,color:T.textSec,marginTop:3}}>{done?"Approved — all stages complete":p.status==="rejected"?"The reviewer's comment is on the timeline":p.status==="draft"?"Not submitted yet":"With "+(isMy?"you":(who||"the assigned approver"))}</div>
+                <div style={{fontSize:13,fontWeight:600,color:T.text}}>{p.status==="draft"?"Draft — not submitted":p.status==="rejected"?"Rejected":done?"Completed":exA===4?"CPT Exists — CFO Acknowledgement":exA===5?"CPT Exists — CMO Acknowledgement":stageDef?.label}</div>
+                <div style={{fontSize:11,color:T.textSec,marginTop:3}}>{p.status==="cpt_exists"?"Closed — the CPT already existed, so no package was built":done?"Approved — all stages complete":p.status==="rejected"?"The reviewer's comment is on the timeline":p.status==="draft"?"Not submitted yet":"With "+(isMy?"you":(who||"the assigned approver"))}</div>
                 {due&&<div style={{fontSize:11,color:dayDiff(due)<0?T.err:T.warn,marginTop:3}}>Due {fmtDate(due)}</div>}
               </div></div>
             <div><H c={T.textSec}>Workflow progress</H>
@@ -724,12 +743,25 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
       const steps=[];for(let n=1;n<=last;n++){const st=STAGES.find(x=>x.num===n);const cur=n===last&&!["approved","rejected","cpt_exists"].includes(p.status);
         const sd=(SLA_CONFIG_DEFAULT.find(c=>c.num===n)||{}).slaDays;
         steps.push({n,label:st.label,who:p.delegatedToUser&&cur?p.delegatedToUser.name:who(n),role:n===1?"Requestor":"Approver",state:cur?(p.status==="modification"?"returned":"waiting"):(p.status==="rejected"&&n===last?"rejected":"done"),
-          assigned:n===1?p.requestDate:(cur?p.stageStartDate:at(n-1)),finished:cur?null:at(n),due:cur&&sd?addDays(p.stageStartDate,sd):null});}
+          assigned:n===1?p.requestDate:(cur?p.stageStartDate:at(n-1)),finished:cur?null:at(n),due:cur&&sd?addWorkDays(p.stageStartDate,sd):null});}
       const rows=steps.reverse();
+      const runs=vlReqs.filter(r=>r.done&&r.status==="completed"||!r.done).slice().sort((a,b)=>(b.toVer||0)-(a.toVer||0));
       const pill={waiting:{t:"WAITING",c:T.warn,bg:"#fffbeb"},done:{t:"DONE",c:T.ok,bg:"#ecfdf5"},returned:{t:"SENT BACK",c:"#ea580c",bg:"#fff7ed"},rejected:{t:"REJECTED",c:T.err,bg:"#fef2f2"}};
       return <Card style={{padding:24}}>
         <ST style={{fontSize:16,color:T.primary,marginBottom:4}}>Approval routing chain</ST>
-        <p style={{fontSize:12,color:T.textSec,margin:"0 0 16px"}}>{rows.length} step{rows.length===1?"":"s"} across 1 run, newest first. Each step shows what it DECIDED — approved, sent back, forwarded — not merely that it closed. A superseded step is one a send-back overtook; it is kept so the route stays readable.</p>
+        <p style={{fontSize:12,color:T.textSec,margin:"0 0 16px"}}>{rows.length+runs.reduce((x,r)=>x+(r.kind==="fin"?(r.stages||[]).length:(r.chain||[]).length+1),0)} steps across {1+runs.length} run{runs.length?"s":""}, newest first. Each step shows what it DECIDED — approved, sent back, forwarded — not merely that it closed. A superseded step is one a send-back overtook; it is kept so the route stays readable.{runs.length>0&&" Each amendment ran its own chain; open a run to see its steps."}</p>
+        {runs.map(r=>{const fin=r.kind==="fin";const list=fin?(r.stages||[]).map(x=>({l:x.full||x.label,who:x.name})):[...(r.chain||[]).map(x=>({l:x.label||x.short,who:x.name})),{l:`PrimeCare confirm (${r.confirmRole||"CSCM"})`,who:r.confirmRole||"CSCM"}];
+          const reached=r.done?list.length:Math.min(list.length,(fin?r.stage:(r.phase==="confirm"?(r.chain||[]).length:r.stage))+1);const sh=list.slice(0,reached).reverse();const open=openRun===r.id||!r.done;
+          return <div key={r.id} style={{marginBottom:14,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+            <div onClick={()=>setOpenRun(open&&r.done?null:r.id)} style={{padding:"9px 14px",background:"#f8fafc",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",cursor:r.done?"pointer":"default",fontSize:12}}>
+              <strong style={{color:T.primary,letterSpacing:0.4}}>VERSION {r.toVer}</strong><span style={{color:T.textSec}}>· {fin?"Financial edit":"Non-financial edit"} · {r.id}</span>
+              <span style={{color:T.textMut}}>· raised by {r.raisedBy} · {fmtDate(r.date)}</span>
+              <span style={{marginLeft:"auto",fontSize:11,color:r.done?T.ok:T.warn,fontWeight:700}}>{r.done?`${open?"▾":"▸"} ${list.length} amendment step${list.length===1?"":"s"} — Applied as V${r.toVer}`:"In approval"}</span></div>
+            {open&&<div style={{padding:"10px 14px"}}>{sh.map((x,i)=>{const cur=!r.done&&i===0;return <div key={i} style={{display:"flex",gap:10,alignItems:"center",padding:"4px 0"}}>
+              <span style={{width:20,height:20,borderRadius:"50%",background:cur?"#fffbeb":"#ecfdf5",color:cur?T.warn:T.ok,display:"inline-flex",alignItems:"center",justifyContent:"center"}}><Ic n={cur?"clock":"check"} s={11}/></span>
+              <span style={{fontSize:12.5,fontWeight:600}}>{x.l}</span><span style={{fontSize:9.5,fontWeight:800,color:cur?T.warn:T.ok}}>{cur?"WAITING":"DONE"}</span><span style={{fontSize:11.5,color:T.textSec}}>{x.who}</span></div>;})}</div>}
+          </div>;})}
+        {runs.length>0&&<div style={{fontSize:11.5,fontWeight:800,color:T.primary,letterSpacing:0.4,margin:"4px 0 10px"}}>VERSION 1 · original approval</div>}
         {rows.map((r,i)=>{const pl=pill[r.state];return <div key={r.n} style={{display:"flex",gap:14}}>
           <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
             <div style={{width:24,height:24,borderRadius:"50%",background:pl.bg,color:pl.c,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Ic n={r.state==="waiting"?"clock":r.state==="done"?"check":r.state==="rejected"?"x":"rotateCcw"} s={12}/></div>
@@ -813,13 +845,7 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
                   <GroupedTemplateBuilder items={active.items} setItems={active.setItems} master={active.master} categories={categories}/>
                 </div>
               </div>
-              {grandTotal>0&&<div style={{padding:"12px 16px",background:"linear-gradient(135deg,#f0fdf4,#ecfdf5)",borderRadius:8,border:`2px solid ${T.ok}40`,marginBottom:8}}>
-                <div style={{fontSize:10,color:T.ok,fontWeight:700,textTransform:"uppercase",letterSpacing:0.4,marginBottom:6}}>All Templates Total (Proc + Wards)</div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr) auto",gap:8,alignItems:"center"}}>
-                  {tCards.map(c=>{const tot=c.items.reduce((s,i)=>s+(i.totalCost||0),0);return<div key={c.k} style={{padding:"4px 8px",fontSize:10}}><div style={{color:T.textMut,display:"flex",alignItems:"center",gap:4}}><Ic n={c.icon} s={10}/>{c.t}</div><div style={{fontSize:12,fontWeight:700,color:tot>0?T.primary:T.textMut}}>{fmtKWD(tot)}</div></div>;})}
-                  <div style={{padding:"6px 14px",background:T.ok,borderRadius:6,color:"#fff",textAlign:"right"}}><div style={{fontSize:9,opacity:0.9}}>GRAND TOTAL</div><div style={{fontSize:15,fontWeight:800}}>{fmtKWD(grandTotal)}</div></div>
-                </div>
-              </div>}
+              <AllTemplatesTotal templates={{procCons,wardsCons,procDrugs,wardsDrugs}} style={{marginBottom:8,marginTop:12}}/>
               <div style={{padding:12,background:"#eff6ff",borderRadius:6,fontSize:11,color:T.info,marginTop:8}}>When you're ready, submit from the <strong>action bar below</strong>. LOS & Services validation lives on the Overview tab.</div>
             </div>;
           })()}
@@ -1007,7 +1033,7 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
     {/* REQUESTED DOCUMENTS TAB (#10) */}
     {tabView==="reqdocs"&&<Card style={{padding:24}}>
       <ST style={{fontSize:13}}>Requested Documents</ST>
-      <p style={{fontSize:11,color:T.textSec,margin:"0 0 14px"}}>Documents asked for by someone in the approval chain. A request stays open until it is provided or marked unavailable — {docsPending} outstanding.</p>
+      <p style={{fontSize:11,color:T.textSec,margin:"0 0 14px"}}>Documents asked for by someone in the approval chain. A request stays outstanding until it is provided or marked unavailable — {docsPending} outstanding of {reqDocs.length}.</p>
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         {reqDocs.map(d=>{const st=DOC_STATUS[d.status]||DOC_STATUS.pending;
           return <div key={d.id} style={{border:`1px solid ${T.border}`,borderLeft:`4px solid ${st.c}`,borderRadius:8,padding:14,background:st.bg}}>
@@ -1018,15 +1044,16 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
                   <Badge color={st.c}><Ic n={st.icon} s={10} style={{verticalAlign:"-1px"}}/> {st.label}</Badge>
                   <span style={{fontSize:9,color:T.textMut}}>{d.id}</span>
                 </div>
-                <div style={{fontSize:10,color:T.textMut}}>Requested by {d.by} ({d.role}) · {fmtDate(d.date)}{d.notify?` · notify: ${d.notify.name}`:""}</div>
-                {d.note&&<div style={{fontSize:11,color:T.text,marginTop:6,padding:"6px 10px",background:"#fff",borderRadius:4,borderLeft:`3px solid ${T.info}`,fontStyle:"italic"}}>"{d.note}"</div>}
+                <div style={{fontSize:10,color:T.textMut}}>Requested by {d.by} ({d.role}) · {fmtDateTime(d.date)}{d.notify?` · asked of ${d.notify.name}`:""}</div>
+                {d.note&&<div style={{fontSize:11,color:T.text,marginTop:6,padding:"6px 10px",background:"#fff",borderRadius:4,borderLeft:`3px solid ${T.info}`,fontStyle:"italic"}}>“{d.note}”</div>}
+                {d.status==="pending"&&d.notify&&d.notify.email!==me.email&&<div style={{fontSize:11,color:T.textSec,marginTop:6}}>Waiting on {d.notify.name} to provide it.</div>}
                 {d.status==="provided"&&<div style={{marginTop:8}}>
                   <div style={{fontSize:10,color:T.textMut,marginBottom:3}}>Provided by {d.providedBy} · {fmtDate(d.providedDate)}</div>
                   {(d.files||[]).map((f,i)=><span key={i} style={{display:"inline-block",fontSize:11,padding:"3px 9px",marginRight:6,background:"#fff",border:`1px solid ${T.ok}40`,borderRadius:10,color:T.ok}}>{attName(f)}</span>)}
                 </div>}
-                {d.status==="not_provided"&&<div style={{fontSize:11,color:T.textSec,marginTop:6}}>Marked unavailable by {d.providedBy} — "{d.naReason}"</div>}
+                {d.status==="not_provided"&&<div style={{fontSize:11,color:T.textSec,marginTop:6}}>Marked unavailable by {d.providedBy} · {fmtDateTime(d.providedDate)}<div style={{color:T.text,marginTop:2}}>“{d.naReason}”</div></div>}
               </div>
-              {d.status==="pending"&&<div style={{minWidth:250}}>
+              {d.status==="pending"&&(!d.notify||d.notify.email===me.email)&&<div style={{minWidth:250}}>
                 <AttachmentBox files={drFiles[d.id]||[]} onChange={fs=>setDrFiles({...drFiles,[d.id]:fs})}/>
                 <div style={{display:"flex",gap:6,marginTop:8,justifyContent:"flex-end"}}>
                   <button onClick={()=>setDrNa(d.id)} style={{padding:"6px 12px",borderRadius:5,border:`1px solid ${T.border}`,background:"#fff",color:T.textSec,fontSize:11,fontWeight:600,cursor:"pointer"}}>Mark unavailable</button>
@@ -1040,13 +1067,14 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
     </Card>}
 
     {tabView==="timeline"&&<Card style={{padding:24}}>
-      <ST style={{fontSize:16,color:T.primary}}>Activity timeline <span style={{fontSize:11,fontWeight:400,color:T.textMut}}>(newest first)</span></ST>
-      {p.timeline.slice().reverse().map((t2,i)=>{const dotC=t2.type==="approve"||t2.type==="complete"||t2.type==="acknowledge"?T.ok:t2.type==="reject"?T.err:t2.type==="warning"?T.warn:t2.type==="forward"?T.purple:t2.type==="route"?T.info:T.textMut;
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><ST style={{fontSize:16,color:T.primary}}>Activity timeline <span style={{fontSize:11,fontWeight:400,color:T.textMut}}>(newest first)</span></ST>
+        {(p.version||1)>1&&(()=>{const hid=p.timeline.filter(t=>(t.ver||1)!==(p.version||1)).length;return hid>0?<button onClick={()=>setTlAll(!tlAll)} style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer",color:T.primary,fontFamily:T.font}}>{tlAll?"Show version V"+(p.version||1):`Show all versions (+${hid} earlier rows)`}</button>:null;})()}</div>
+      {p.timeline.filter(t=>tlAll||(p.version||1)<=1||(t.ver||1)===(p.version||1)).slice().reverse().map((t2,i,arr)=>{const dotC=t2.type==="approve"||t2.type==="complete"||t2.type==="acknowledge"?T.ok:t2.type==="reject"?T.err:t2.type==="warning"?T.warn:t2.type==="forward"?T.purple:t2.type==="route"?T.info:T.textMut;
         const emoji=t2.type==="create"?"✎":t2.type==="approve"||t2.type==="complete"?"✓":t2.type==="acknowledge"?"★":t2.type==="reject"?"✕":t2.type==="forward"?"→":t2.type==="route"?"↓":t2.type==="warning"?"⚠":"→";
         return<div key={i} style={{display:"flex",gap:12}}>
           <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
             <div style={{width:28,height:28,borderRadius:"50%",background:dotC+"15",color:dotC,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0,border:`2px solid ${dotC}30`}}>{emoji}</div>
-            {i<p.timeline.length-1&&<div style={{width:2,flex:1,background:dotC+"20",minHeight:20}}/>}
+            {i<arr.length-1&&<div style={{width:2,flex:1,background:dotC+"20",minHeight:20}}/>}
           </div>
           <div style={{paddingBottom:12,flex:1}}>
             <div style={{fontSize:13,fontWeight:600,color:T.text}}>{t2.action}</div>
@@ -1061,13 +1089,16 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
       <table style={{width:"100%",borderCollapse:"collapse"}}><thead><tr style={{background:T.primaryLight}}>
         {["Version","Date","Change","Changed by","Summary","Certificate"].map(h=><th key={h} style={{padding:"10px 12px",fontSize:10.5,fontWeight:800,color:T.textSec,textTransform:"uppercase",letterSpacing:0.4,textAlign:"left"}}>{h}</th>)}
       </tr></thead><tbody>
-        {(p.versionHistory||[]).slice().reverse().map((v,i)=>{const cur=v.version===(p.version||1);const issued=p.status==="approved"||!cur;return <tr key={i} style={{borderBottom:`1px solid ${T.borderLight}`}}>
-          <td style={{padding:"10px 12px"}}><Badge color={T.ok}>V{v.version}</Badge>{cur&&<span style={{fontSize:10.5,color:T.textMut,marginLeft:8}}>current</span>}</td>
+        {[...(p.versionHistory||[]),...vlReqs.filter(r=>r.baseId===p.id&&r.kind==="fin"&&["withdrawn","rejected"].includes(r.status)).map(r=>({version:r.toVer,date:r.endDate||r.date,change:"Financial edit",changedBy:r.raisedBy,summary:`Finance — new version V${r.toVer}`,dead:true}))]
+          .sort((a,b)=>a.version-b.version||String(a.date).localeCompare(String(b.date))).reverse().map((v,i)=>{const cur=!v.dead&&v.version===(p.version||1);const issued=!v.dead&&(p.status==="approved"||!cur);return <tr key={i} style={{borderBottom:`1px solid ${T.borderLight}`,opacity:v.dead?0.7:1}}>
+          <td style={{padding:"10px 12px"}}><Badge color={v.dead?T.textMut:T.ok}>V{v.version}</Badge>{cur&&<span style={{fontSize:10.5,color:T.textMut,marginLeft:8}}>current</span>}{v.dead&&<span style={{fontSize:10.5,color:T.err,marginLeft:8}}>not in force</span>}</td>
           <td style={{padding:"10px 12px",fontSize:12}}>{fmtDateTime(v.date)}</td>
           <td style={{padding:"10px 12px",fontSize:12}}>{v.change||(v.version===1?"Request raised":"Edit")}</td>
           <td style={{padding:"10px 12px",fontSize:12}}>{v.changedBy}</td>
-          <td style={{padding:"10px 12px",fontSize:12}}>{v.summary==="New procedure request"?"Request raised":v.summary}</td>
-          <td style={{padding:"10px 12px",fontSize:11}}>{issued?<span onClick={()=>{setCertVer(v.version);setTab("cert");}} style={{color:T.primary,fontWeight:600,cursor:"pointer"}}>View certificate →</span>:<span style={{color:T.textMut}}>issued once this version completes approval</span>}</td>
+          <td style={{padding:"10px 12px",fontSize:12}}>{v.summary==="New procedure request"?"Request raised":v.summary}
+            {(v.editDiff||[]).length>0&&<details style={{marginTop:3}}><summary style={{cursor:"pointer",fontSize:11,color:T.primary}}>{v.editDiff.slice(0,2).map(x=>x.l||x.label).join(", ")}{v.editDiff.length>2?` and ${v.editDiff.length-2} more`:""}</summary>
+              {v.editDiff.map((x,j)=><div key={j} style={{fontSize:11,color:T.textSec,padding:"2px 0"}}><strong>{x.l||x.label}</strong>: <span style={{textDecoration:"line-through",color:T.err}}>{x.old}</span> → <span style={{color:T.ok,fontWeight:600}}>{x.new}</span></div>)}</details>}</td>
+          <td style={{padding:"10px 12px",fontSize:11}}>{issued?<span onClick={()=>{setCertVer(v.version);setTab("cert");}} style={{color:T.primary,fontWeight:600,cursor:"pointer"}}>{p.id}-CERT-V{v.version}</span>:<span style={{color:T.textMut}}>{v.dead?"never issued — amendment did not complete":"issued once this version completes approval"}</span>}</td>
         </tr>;})}
       </tbody></table>
     </Card>}
@@ -1076,8 +1107,9 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
     {tabView==="cert"&&(p.versionHistory||[]).length>1&&<Card style={{marginBottom:14,padding:"12px 16px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
       <span style={{fontSize:12,fontWeight:600,color:T.text}}>Certificate for version:</span>
       <Select style={{...inp,width:220}} value={certVer} onChange={e=>setCertVer(Number(e.target.value))}>
-        {p.versionHistory.map(v=><option key={v.version} value={v.version}>V{v.version} — {fmtDate(v.date)}{v.version===p.version?" (current)":""}</option>)}
+        {p.versionHistory.map(v=><option key={v.version} value={v.version}>V{v.version}{v.version===p.version?" (current)":""}</option>)}
       </Select>
+      {(()=>{const v=(p.versionHistory||[]).find(x=>x.version===certVer);return v?<span style={{fontSize:11,color:T.textSec}}>Filed {fmtDateTime(v.date)}</span>:null;})()}
       {certVer!==p.version&&<span style={{fontSize:10,color:T.textMut}}>Showing an earlier version's certificate summary.</span>}
     </Card>}
     {tabView==="cert"&&certVer!==p.version&&(()=>{const v=(p.versionHistory||[]).find(x=>x.version===certVer)||{};
@@ -1114,7 +1146,8 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
           <div style={{textAlign:"center",padding:"20px 40px"}}>
             <img src={LOGO} alt={APP.orgFull} style={{height:56,width:"auto",display:"block",margin:"0 auto 14px"}}/>
             <div style={{fontSize:18,fontWeight:700,color:T.primary,marginBottom:4}}>Procedure Package Certificate</div>
-            <div style={{fontSize:11,color:T.textSec,marginBottom:20}}>Certificate No: {p.id}-CERT-V{p.version}</div>
+            <div style={{fontSize:11,color:T.textSec,marginBottom:6}}>Certificate No: {p.id}-CERT-V{p.version}</div>
+            {p.status==="approved"&&(p.versionHistory||[]).slice(-1)[0]&&(Date.now()-new Date(String((p.timeline||[]).slice(-1)[0]?.date||"").replace(" ","T")).getTime())<5*60000&&<div style={{fontSize:10.5,color:T.warn,marginBottom:14}}>Not filed yet — the system files and emails it shortly after acknowledgement</div>}
 
             {/* Package details */}
             <div style={{textAlign:"left",padding:"16px 24px",background:"#fff",borderRadius:6,border:`1px solid ${T.border}`,marginBottom:16}}>
@@ -1225,6 +1258,7 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
               </div>
             </div>
 
+            <div style={{fontSize:11,color:T.textSec,margin:"-4px 0 12px"}}>{p.migrated?"Migrated from PrimeCare — legacy paper approvals on file":"Completed the full 15-step approval chain · Live on PrimeCare"}</div>
             <div style={{fontSize:9,color:T.textMut,borderTop:`1px solid ${T.border}`,paddingTop:12}}>System-generated by {APP.name}. No manual signature required.<br/>Generated: {new Date().toISOString().split("T")[0]}<br/><strong>Template line detail is issued as a separate report.</strong></div>
             <div style={{display:"flex",gap:8,justifyContent:"center",marginTop:12}}>
               <button onClick={()=>window.print()} style={{padding:"8px 18px",borderRadius:6,border:`1px solid ${T.primary}`,background:"#fff",fontSize:11,fontWeight:600,cursor:"pointer",color:T.primary}}>🖨 Print / Save PDF</button>
@@ -1271,7 +1305,7 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
           </div>
         </div>
         {cmioStatus==="Exists"&&<div style={{background:"#eff6ff",padding:12,borderRadius:8,marginBottom:12,border:`1px solid ${T.info}30`,fontSize:12,color:T.info}}>Approving will route this request onto the <strong>CPT-Exists short path</strong>: CFO acknowledgement, then CMO acknowledgement, then closed. It will not be costed or priced.</div>}
-        {p.delegatedTo===me.email&&<div style={{padding:"10px 14px",background:"#faf5ff",border:`1px solid ${T.purple}40`,borderRadius:8,marginBottom:8,fontSize:11,color:T.purple}}>🔄 <strong>You are filling on behalf of {p.delegatedByUser?.name||"the primary approver"}.</strong> After confirming, request returns to them for final approval.</div>}
+        {p.delegatedTo===me.email&&<div style={{padding:"10px 14px",background:"#faf5ff",border:`1px solid ${T.purple}40`,borderRadius:8,marginBottom:8,fontSize:11.5,color:T.purple}}><strong>Filling in as delegate — on behalf of {p.delegatedByUser?.name||"the approver"}.</strong> Fill in what the step needs, then confirm — the decision returns to the approver.{p.delegateComment&&<div style={{marginTop:4}}>Delegation comment: “{p.delegateComment}”</div>}</div>}
 
       </div>}
 
@@ -1546,15 +1580,17 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
       if(editFlow&&editFlow.all){
         const n=efChanged.length;
         const submitAll=()=>{
-          if(!n){alert("Change at least one field");return;}
-          if(!efReason.trim()){alert("Reason for change is required");return;}
+          if(!n){alert("Change at least one field first.");return;}
+          if(!efReason.trim()){alert("A reason is required — it is what the approvers read.");return;}
+          if(!cbox||cbox.kind!=="editGo"){setCbox({kind:"edit",n,fin:!!(efRoute&&efRoute.finance)});return;}
+          setCbox(null);
           const changes=efChanged.map(k=>({k,l:MFIELDS[k].l,from:MFIELDS[k].get(p)||"—",to:efVals[k]||"—",tab:MFIELD_TAB[k]||"overview",scen:(editDesign.fieldMap||{})[k]}));
-          if(amending){onActVl(amending,"resubmit",{changes});setAmending(null);setEditFlow(null);onOpenVl(amending.id);return;}
-          const id=onSubmitEdit(changes,efScen,efReason);if(id){setEditFlow(null);onOpenVl(id);}
+          if(amending){onActVl(amending,"resubmit",{changes,reason:efReason});setAmending(null);setEditFlow(null);setEfReason("");return;}
+          const id=onSubmitEdit(changes,efScen,efReason);if(id){setEditFlow(null);setEfReason("");}
         };
-        return <ActionBar label={`Change Request — Edit Package${efScen.length?" · "+efScen.map(s=>SCEN_SHORT[s]).join(" + "):""}`} icon="pencil" sub={n?`${n} field${n===1?"":"s"} changed — submit to route it for approval`:"Change at least one field above — the highlighted controls are editable in place"} me={me} comment={<input value={efReason} onChange={e=>setEfReason(e.target.value)} placeholder="Reason for change (required)…" style={{...inp,margin:0,flex:"2 1 300px",minWidth:220,fontSize:12}}/>}>
+        return <ActionBar label={`Change Request — Edit Package${efScen.length?" · "+efScen.map(s=>SCEN_SHORT[s]).join(" + "):""}`} icon="pencil" sub={<>{n?`${n} field${n===1?"":"s"} changed — submit to route it for approval`:"Change at least one field above — the highlighted controls are editable in place"}{amending&&amending.reason?<> · Original reason: {amending.reason}</>:null}</>} me={me} comment={<input aria-label={amending?"Reason for this resubmission — required":"Reason for change — required"} value={efReason} onChange={e=>setEfReason(e.target.value)} placeholder={amending?"Reason for this resubmission — required":"Reason for change — required"} style={{...inp,margin:0,flex:"2 1 300px",minWidth:220,fontSize:12}}/>}>
           <button onClick={()=>{setEditFlow(null);setAmending(null);}} style={{...BTN2,border:`1px solid ${T.border}`,color:T.textSec}}>Cancel</button>
-          <button onClick={submitAll} style={{...BTN,background:n?T.primary:"#94a3b8",color:"#fff"}}><Ic n="send" s={13}/>{amending?"Resubmit Change":"Submit Change Request"}</button>
+          <button onClick={submitAll} style={{...BTN,background:n?T.primary:"#94a3b8",color:"#fff"}}><Ic n="send" s={13}/>Submit Change Request</button>
         </ActionBar>;
       }
       if(editFlow){
@@ -1604,19 +1640,34 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
       const cmt=<input value={comments} onChange={e=>setComments(e.target.value)} placeholder={p.currentStage===2||p.currentStage===3?"Comment (required to request modification or reject)…":reqComment?"Comment (required to request modification)…":"Comment (optional)…"} style={{...inp,margin:0,flex:"2 1 240px",minWidth:180,fontSize:12}}/>;
       const more=[...(isMy&&!covering&&!delegateFill&&stageDef?.canDelegate?[{ic:'forward',l:'Forward / Delegate',fn:()=>setShowDelegateModal(true)}]:[]),
         ...(_live?[{ic:'inboxIn',l:'Request a Document',fn:()=>setShowDocReq(true)}]:[]),
-        ...(_live&&!covering&&!delegateFill&&!p.reassignedTo?[{ic:'swap',l:`Reassign ${stageDef?.label||""} (${holderName} on leave)`,fn:()=>setShowReassign(true)}]:[])];
+        ...(_live&&!covering&&!delegateFill&&!p.reassignedTo?[{ic:'swap',l:`Reassign ${p.status==="cpt_exists_cfo_ack"?"CPT Exists — CFO Acknowledgement":p.status==="cpt_exists_cmo_ack"?"CPT Exists — CMO Acknowledgement":stageDef?.label||""} (${holderName} on leave)`,fn:()=>setShowReassign(true)}]:[])];
       const modBtn=<button onClick={()=>{if(!comments.trim()){alert("A comment is required — it is what tells the recipient what to change.");return;}onAction(p,"modify",{actionLabel:`${stageDef?.label} — sent back for changes`,comment:comments});setComments("");}} style={{...BTN2,border:`1px solid ${T.info}`,color:T.info}}><Ic n="rotateCcw" s={13}/>Request modification</button>;
-      const rejBtn=<button onClick={()=>{if(!comments.trim()){alert("A comment is required to reject.");return;}onAction(p,"reject",{actionLabel:`${stageDef?.label} — rejected`,comment:comments});setComments("");}} style={{...BTN2,border:`1px solid ${T.err}`,color:T.err}}>Reject</button>;
+      const rejBtn=<button onClick={()=>{if(!comments.trim()){alert("A comment is required to reject.");return;}onAction(p,"reject",{actionLabel:`${stageDef?.label} — request rejected`,comment:comments});setComments("");}} style={{...BTN2,border:`1px solid ${T.err}`,color:T.err}}>Reject</button>;
       const okBtn=(label,fn,icon="check")=>{const dis=hint.length>0;return <button disabled={dis} onClick={()=>!dis&&fn()} style={{...BTN,background:dis?"#94a3b8":T.ok,color:"#fff",cursor:dis?"not-allowed":"pointer",opacity:dis?0.75:1}}><Ic n={icon} s={13} sw={2.6}/>{label}</button>;};
       const approve=(extra={})=>{onAction(p,"approve",{actionLabel:`${stageDef?.label} — approved; sent to ${sentTo}`,comment:comments,...extra});setComments("");};
       const bar=(children,label)=><ActionBar more={more} label={label||stageDef?.label} sub={"Acting as "+me.name} me={me} comment={<>{cmt}{hintEl}</>}>{children}</ActionBar>;
+      if(openReq&&openReq.kind==="fin"&&!openReq.done&&openReq.status!=="returned"&&!editFlow){const fr=openReq;const st=fr.stages[fr.stage]||{};const lb=st.full||st.label;
+        const fdo=a=>{if((a==="reject"||a==="return")&&!comments.trim()){alert(a==="reject"?"A comment is required to reject.":"A comment is required — it is what tells the recipient what to change.");return;}onActVl(fr,a,comments);setComments("");};
+        if(editTurn(fr,me))return <ActionBar label={`${lb} · Amendment V${fr.toVer}`} sub={"Acting as "+me.name} me={me} comment={<input value={comments} onChange={e=>setComments(e.target.value)} placeholder="Comment (required to request modification or reject)…" style={{...inp,margin:0,flex:"2 1 240px",minWidth:180,fontSize:12}}/>}>
+          <button onClick={()=>fdo("reject")} style={{...BTN2,border:`1px solid ${T.err}`,color:T.err}}>Reject</button>
+          {fr.stage>0&&fr.stage<fr.stages.length-1&&<button onClick={()=>fdo("return")} style={{...BTN2,border:`1px solid ${T.info}`,color:T.info}}><Ic n="rotateCcw" s={13}/>Request modification</button>}
+          <button onClick={()=>fdo("approve")} style={{...BTN,background:T.ok,color:"#fff"}}><Ic n="check" s={13} sw={2.6}/>{fr.stage===fr.stages.length-1?"Acknowledge":"Approve"}</button>
+        </ActionBar>;
+        return <ActionBar label={"Waiting: "+lb} sub="No decision is needed from you at this step" icon="clock" me={me}>
+          {me.isSiteAdmin&&<button onClick={()=>onOpenVl(fr.id)} style={{...BTN2,border:`1px solid ${T.border}`,color:T.text}}><Ic n="swap" s={13}/>Reassign {lb} ({st.name||"approver"} on leave)</button>}
+        </ActionBar>;}
       if(isAmend)return <ActionBar label="Doctor Request" sub={"Acting as "+me.name} me={me} comment={<input value={comments} onChange={e=>setComments(e.target.value)} placeholder="Comment (optional)…" style={{...inp,margin:0,flex:"2 1 260px",minWidth:200,fontSize:12}}/>}>
         <button onClick={amdSubmit} style={{...BTN,background:amdOk?T.ok:"#94a3b8",color:"#fff",cursor:amdOk?"pointer":"not-allowed"}}><Ic n="check" s={13} sw={2.6}/>Submit data</button>
       </ActionBar>;
       // Delegate filling a forwarded step: one button, the decision goes back to the approver
-      if(isMy&&delegateFill&&[3,10,12,13,14].includes(p.currentStage))return bar(okBtn("Confirm & Return to Primary",()=>{
+      // live: the delegate's own bar — "Filling in as delegate", an optional note, purple Confirm & Return
+      if(isMy&&delegateFill&&[3,10,12,13,14].includes(p.currentStage))return <ActionBar more={[...(stageDef?.canDelegate?[{ic:'forward',l:'Forward / Delegate',fn:()=>setShowDelegateModal(true)}]:[]),...(_live?[{ic:'inboxIn',l:'Request a Document',fn:()=>setShowDocReq(true)}]:[]),...(_live?[{ic:'swap',l:`Reassign ${stageDef?.label||""} (${me.name} on leave)`,fn:()=>setShowReassign(true)}]:[])]} label={stageDef?.label} sub={"Filling in as delegate — "+me.name} me={me}
+        comment={<><input value={comments} onChange={e=>setComments(e.target.value)} placeholder="Note for the approver (optional)…" style={{...inp,margin:0,flex:"2 1 240px",minWidth:180,fontSize:12}}/>{hintEl}</>}>
+        {modBtn}
+        <button disabled={hint.length>0} onClick={()=>{if(hint.length)return;
         const d=p.currentStage===3?{cmioData:{cptStatus:cmioStatus,accurateCptCode:cmioCode,accurateCptName:cmioName}}:p.currentStage===10?{fcdData:fcdPayload()}:p.currentStage===12?{cscmData:{opCode:cscmOpCode,opName:cscmOpName,linkedToCpt:cscmLinked}}:p.currentStage===13?{pkgData:{pkgId,pkgName,linkedToPkg:pkgLinked,addedOnSystem:pkgAdded,capBothBranches:pkgCapBoth}}:{linkData:{procConsTemplate:tlPC,wardsConsTemplate:tlWC,procDrugsTemplate:tlPD,wardsDrugsTemplate:tlWD,linkingCompleted:tlDone}};
-        onAction(p,"delegate_confirm",{actionLabel:`${stageDef?.label} — filled in & returned to ${p.delegatedByUser?.name||"the approver"}`,comment:comments,...d});},"forward"));
+        onAction(p,"delegate_confirm",{actionLabel:`${stageDef?.label} — filled in & returned to ${p.delegatedByUser?.name||"the approver"}`,comment:comments,...d});setComments("");}} style={{...BTN,background:hint.length?"#c4b5fd":T.purple,color:"#fff",cursor:hint.length?"not-allowed":"pointer"}}><Ic n="check" s={13} sw={2.6}/>Confirm & Return to Primary</button>
+      </ActionBar>;
       if(p.currentStage===2&&isMy)return bar(<>{modBtn}{rejBtn}{okBtn("Approve",()=>approve())}</>);
       if(p.currentStage===3&&isMy)return bar(<>{modBtn}{rejBtn}{okBtn("Approve",()=>onAction(p,"approve",{actionLabel:`CMIO validated — CPT ${cmioCode} — ${cmioName} confirmed (${cmioStatus||p.cptStatus||"New"})`,comment:comments,cmioData:{cptStatus:cmioStatus||p.cptStatus||"New",accurateCptCode:cmioCode,accurateCptName:cmioName}}))}</>);
       if(p.currentStage===4&&isMy)return bar(okBtn("Submit data",()=>{{const miss=tplMissingUom({procCons,wardsCons,procDrugs,wardsDrugs});if(miss){alert(`${miss} template item(s) have no UOM selected. The UOM chooses the price, so a line without one would cost nothing.`);return;}}
@@ -1628,8 +1679,9 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
       if(p.currentStage===13&&isMy)return bar(okBtn("Approve",()=>isEditVer?doStage13():setCbox({kind:"lockPkg"})));
       if(p.currentStage===14&&isMy)return bar(okBtn("Approve",()=>onAction(p,"approve",{actionLabel:isEditVer?"CSCM confirmed templates (adjusted if needed)":(tlDone==="Yes"?"CSCM linked the OT templates on live":"CSCM recorded the OT template numbers — linking not yet complete"),comment:comments,linkData:{procConsTemplate:tlPC,wardsConsTemplate:tlWC,procDrugsTemplate:tlPD,wardsDrugsTemplate:tlWD,linkingCompleted:tlDone},attachments:[...(p.attachments||[]),...proof.map(f=>({...(typeof f==="string"?{name:f}:f),kind:"PrimeCare proof",step:"CSCM Template Link"}))]})));
       if(p.currentStage===15&&isMy)return bar(okBtn("Acknowledge",()=>setCbox({kind:"finalise"}),"shieldCheck"));
-      if((p.status==="cpt_exists_cfo_ack"&&role==="cfo")||(p.status==="cpt_exists_cmo_ack"&&role==="cmo"))return <ActionBar more={more} label="CPT Exists — Acknowledgement" me={me}>
-        <button onClick={()=>setShowActionModal("ack_exists")} style={{...BTN,background:T.ok,color:"#fff"}}><Ic n="shieldCheck" s={13}/>Acknowledge</button>
+      // live: one click, no confirmation box
+      if((p.status==="cpt_exists_cfo_ack"&&role==="cfo")||(p.status==="cpt_exists_cmo_ack"&&role==="cmo"))return <ActionBar more={more} label={p.status==="cpt_exists_cfo_ack"?"CPT Exists — CFO Acknowledgement":"CPT Exists — CMO Acknowledgement"} sub={"Acting as "+me.name} me={me} comment={<input value={comments} onChange={e=>setComments(e.target.value)} placeholder="Comment (optional)…" style={{...inp,margin:0,flex:"2 1 240px",minWidth:180,fontSize:12}}/>}>
+        <button onClick={()=>{onAction(p,p.status==="cpt_exists_cfo_ack"?"ack_cfo_exists":"ack_cmo_exists",{comment:comments});setComments("");}} style={{...BTN,background:T.ok,color:"#fff"}}><Ic n="shieldCheck" s={13}/>Acknowledge</button>
       </ActionBar>;
       {
         const util=[];
@@ -1638,9 +1690,9 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
         if(_live&&(me.isSiteAdmin||role==="cscm")&&!p.reassignedTo&&p.currentStage<=15)util.push({ic:"swap",l:`Reassign ${stageDef?.label||""} (${holderName} on leave)`,fn:()=>setShowReassign(true)});
         if(p.status==="approved"&&p.lifecycle!=="Deactivated"&&role!=="doctor")util.push({ic:"ban",l:"Request Deactivation",fn:()=>onRaiseDeact("Deactivation",p),danger:true});
         if(p.status==="approved"&&p.lifecycle==="Deactivated"&&role!=="doctor")util.push({ic:"rotateCcw",l:"Request Reactivation",fn:()=>onRaiseDeact("Reactivation",p)});
-        if(!util.length)return null;
+        if(!util.length&&!(p.delegatedTo&&p.delegatedBy===me.email))return null;
         const vlbl=p.status==="approved"?(p.lifecycle==="Deactivated"?"Deactivated Package":"Approved & Active Package"):("Waiting: "+(stageDef?.label||p.status));
-        const vsub=p.status==="approved"?("Version "+(p.version||1)+" · record actions"):"No decision is needed from you at this step";
+        const vsub=p.status==="approved"?("Version "+(p.version||1)+" · record actions"):p.delegatedTo&&p.delegatedBy===me.email?"Forwarded to your delegate — the decision returns to you once they confirm":"No decision is needed from you at this step";
         const vicon=p.status==="approved"?"shieldCheck":"clock";
         return <ActionBar label={vlbl} sub={vsub} icon={vicon} me={me}>
           {util.map((u,ix)=><button key={ix} onClick={u.fn} disabled={u.disabled} title={u.title||""} style={{...BTN2,border:`1px solid ${u.danger?T.err:T.border}`,color:u.danger?T.err:T.text,opacity:u.disabled?0.45:1,cursor:u.disabled?"not-allowed":"pointer"}}><Ic n={u.ic} s={13}/>{u.l}</button>)}
@@ -1648,21 +1700,22 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
       }
     })()}
 
-    {cbox&&(()=>{const F=p.financial||{};const tpl=(F.totalConsCost||0)+(F.totalDrugsCost||0);
+    {cbox&&cbox.kind!=="editGo"&&(()=>{const F=p.financial||{};const tpl=(F.totalConsCost||0)+(F.totalDrugsCost||0);
       const row=(l,v,c,b)=><div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderTop:`1px solid ${T.borderLight}`,fontSize:12.5,fontWeight:b?700:500}}><span style={{color:b?T.text:T.textSec}}>{l}</span><span style={{color:c||T.text,fontWeight:700}}>{v}</span></div>;
       const box=(icon,ic,title,body,content,okLabel,okColor,onOk)=><div onClick={()=>setCbox(null)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",zIndex:9996,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-        <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,width:"100%",maxWidth:460,padding:"18px 20px",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
+        <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,width:"100%",maxWidth:cbox.kind==="edit"?640:460,maxHeight:"88vh",overflowY:"auto",padding:"18px 20px",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><span style={{width:30,height:30,borderRadius:8,background:ic+"18",color:ic,display:"inline-flex",alignItems:"center",justifyContent:"center"}}><Ic n={icon} s={15}/></span><strong style={{fontSize:14.5,color:T.text}}>{title}</strong></div>
           <div style={{fontSize:12,color:T.textSec,lineHeight:1.55,marginBottom:12}}>{body}</div>
           {content}
           <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}}>
-            <button onClick={()=>setCbox(null)} style={{padding:"8px 18px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",color:T.text}}>Cancel</button>
+            <button onClick={()=>setCbox(null)} style={{padding:"8px 18px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",color:T.text}}>{cbox.kind==="edit"?"Back to editing":"Cancel"}</button>
             <button onClick={()=>{setCbox(null);onOk();}} style={{padding:"8px 18px",borderRadius:7,border:"none",background:okColor,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>{okLabel}</button>
           </div>
         </div></div>;
       if(cbox.kind==="costing"){const f=cbox.f;const total=f._tpl+f.totalServicesCost+(Number(f.additionalServicesCost)||0);const m=total>0?((Number(f.finalPatientPrice)-total)/total*100):0;
         return box("alert",T.warn,"Review this costing before approving","These figures are written to the restricted package-financials record, and the request moves to the CEO for pricing. Check them before approving.",
           <><div style={{background:"#f8fafc",border:`1px solid ${T.border}`,borderRadius:8,padding:"4px 14px"}}>{row("OT Templates subtotal",fmtKWD(f._tpl))}{row("Services & LOS · standard costs",fmtKWD(f.totalServicesCost))}{Number(f.additionalServicesCost)>0&&row("Other additional services",fmtKWD(f.additionalServicesCost))}{row("Total package cost",fmtKWD(total),null,true)}{row("Final patient price",fmtKWD(f.finalPatientPrice),T.ok,true)}{row("Margin (on cost)",m.toFixed(1)+"%",m>=0?T.ok:T.err,true)}</div>
+          {m<0&&<div style={{marginTop:10,padding:"8px 12px",borderRadius:6,background:"#fef2f2",border:"1px solid #fecaca",fontSize:11.5,color:T.err}}>⚠ Approving records a loss of {fmtKWD(total-Number(f.finalPatientPrice))} on this package.</div>}
           <div style={{fontSize:10.5,fontWeight:800,letterSpacing:0.5,color:T.textSec,margin:"12px 0 4px"}}>COMMERCIAL TERMS</div>
           {row("Accept Doctor Fees",f.acceptDoctorFees)}{row("Advance Payment (Inpatient Visit)",f.advancePayment)}{row("Service Revenue · Doctors",f.serviceRevenueDoctors)}{row("Maximum CAP Limit",f.hasCap==="Yes"?fmtKWD(f.capLimit):"No")}</>,
           "Approve costing",T.primaryDark||T.primary,()=>{onAction(p,"approve_fcd",{actionLabel:"CFO approved with the FCD details",comment:comments,fcdData:f});setComments("");});}
@@ -1670,6 +1723,31 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
         return box(ch?"alert":"check",ch?T.warn:T.ok,ch?"Change the patient price?":"Confirm this price?",ch?"Both figures are recorded against this version, and the CFO is told the price changed — the alert itself carries no amount.":"Approving confirms the CFO’s figure unchanged and raises no alert.",
           <div style={{background:"#f8fafc",border:`1px solid ${T.border}`,borderRadius:8,padding:"4px 14px"}}>{row("Total package cost",fmtKWD(total))}{ch&&row("Price before",fmtKWD(F.finalPatientPrice))}{row(ch?"Price after":"Final patient price",fmtKWD(np),T.ok,true)}{row("Margin (on cost)",m.toFixed(1)+"%",m>=0?T.ok:T.err,true)}</div>,
           ch?"Approve new price":"Approve price",T.primaryDark||T.primary,()=>{onAction(p,"approve",{actionLabel:ch?"CEO approved & adjusted the patient price":"CEO approved the patient price",comment:comments,ceoPrice:np});setComments("");});}
+      if(cbox.kind==="edit"){const v=p.version||1;const scl=[...new Set(efChanged.map(k=>SCEN_SHORT[(editDesign.fieldMap||{})[k]]).filter(Boolean))].join(" + ");
+        const th={padding:"5px 8px",fontSize:10,fontWeight:700,color:T.textMut,textAlign:"left",textTransform:"uppercase",letterSpacing:0.4,borderBottom:`1px solid ${T.border}`};
+        return box("pencil",T.primary,amending?`Resubmit ${amending.id}?`:"Submit this edit?",<><div style={{fontSize:11,color:T.textMut,marginBottom:6}}>{p.id} · V{v} → V{v+1} · {cbox.n} change{cbox.n===1?"":"s"} across {scl||"this package"}</div>{cbox.fin?<>A finance field is changed. V{v+1} re-runs all {efRoute?efRoute.total:15} stages. Stage owners re-enter their forms as usual.</>:<>One request, one route. The package stays approved at V{v}; the change applies as V{v+1} after the last PrimeCare confirm.</>}</>,
+        <div>
+          <table style={{width:"100%",borderCollapse:"collapse",marginBottom:10}}><thead><tr>{["Field","Scenario","Current","New"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
+            <tbody>{["overview","templates","financial","system"].filter(t=>efChanged.some(k=>(MFIELD_TAB[k]||"overview")===t)).map(t=><React.Fragment key={t}>
+              <tr><td colSpan={4} style={{padding:"6px 8px 2px",fontSize:10,fontWeight:800,color:T.primary,letterSpacing:0.4}}>{TAB_LBL[t].toUpperCase()} <span style={{background:T.primaryLight,borderRadius:8,padding:"0 6px"}}>{efChanged.filter(k=>(MFIELD_TAB[k]||"overview")===t).length}</span></td></tr>
+              {efChanged.filter(k=>(MFIELD_TAB[k]||"overview")===t).map(k=><tr key={k} style={{borderTop:`1px solid ${T.borderLight}`}}><td style={{padding:"5px 8px",fontSize:12,fontWeight:600}}>{MFIELDS[k].l}</td><td style={{padding:"5px 8px"}}><span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:6,background:"#ecfdf5",color:T.primary}}>{String(SCEN_SHORT[(editDesign.fieldMap||{})[k]]||"").toUpperCase()}</span></td><td style={{padding:"5px 8px",fontSize:12,color:T.textMut}}>{MFIELDS[k].get(p)||"—"}</td><td style={{padding:"5px 8px",fontSize:12,fontWeight:700,color:T.ok}}>{efVals[k]||"—"}</td></tr>)}
+            </React.Fragment>)}</tbody></table>
+          {efRoute&&efRoute.finance&&<div style={{marginBottom:10}}><div style={{fontSize:10,fontWeight:800,letterSpacing:0.5,color:T.textSec,marginBottom:5}}>APPROVAL ROUTE — ALL {efRoute.total} STAGES</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>{efRoute.stages.filter(s=>s.num>1).map(s=><span key={s.num} style={{fontSize:10.5,padding:"2px 8px",borderRadius:10,border:`1px solid ${s.extra?T.purple+"60":T.border}`,color:s.extra?T.purple:T.text}}><strong>{s.num}</strong> {s.label}</span>)}</div>
+            <div style={{fontSize:11,color:T.textMut,marginTop:5}}>{efRoute.extras.length?`All ${efRoute.total} stages — the 15 a financial edit runs today, plus ${efRoute.extras.join(", ")}.`:"All 15 stages, as a financial edit runs today."}</div></div>}
+          {efRoute&&!efRoute.finance&&<div style={{marginBottom:10}}><div style={{fontSize:10,fontWeight:800,letterSpacing:0.5,color:T.textSec,marginBottom:5}}>APPROVAL ROUTE — {efRoute.total} STEP{efRoute.total===1?"":"S"} · THEN PRIMECARE CONFIRM ({efRoute.confirm})</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4,alignItems:"center"}}>{efRoute.steps.map((s,i)=><React.Fragment key={i}><span style={{fontSize:11,padding:"2px 8px",borderRadius:10,border:`1px solid ${T.border}`}}><strong>{i+1}</strong> {s.short}</span><span style={{color:T.textMut}}>→</span></React.Fragment>)}<span style={{fontSize:11,padding:"2px 8px",borderRadius:10,border:`1px solid ${T.info}50`,color:T.info,background:"#eff6ff"}}>PrimeCare confirm ({efRoute.confirm})</span></div></div>}
+          <div style={{fontSize:12,color:T.textSec}}><strong>Reason:</strong> {efReason}</div></div>,amending?"Resubmit":"Submit edit",T.primary,()=>{setCbox({kind:"editGo"});setTimeout(()=>{const b=[...document.querySelectorAll('[data-tour=actionbar] button')].find(x=>/Submit Change Request|Resubmit Change/.test(x.textContent));b&&b.click();},0);});}
+      if(cbox.kind==="withdraw"){const r=cbox.r;return <div onClick={()=>setCbox(null)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.45)",zIndex:9996,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+        <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,width:"100%",maxWidth:480,padding:"18px 20px",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><span style={{width:30,height:30,borderRadius:8,background:T.err+"18",color:T.err,display:"inline-flex",alignItems:"center",justifyContent:"center"}}><Ic n="rotateCcw" s={15}/></span><strong style={{fontSize:14.5,color:T.text}}>Withdraw amendment V{r.toVer}?</strong></div>
+          <div style={{fontSize:12,color:T.textSec,lineHeight:1.55,marginBottom:10}}>{p.id} returns to V{r.fromVer}, approved and stays in the Approved list. The withdrawn version is kept in the record and the approvals it had collected are ended.</div>
+          <textarea aria-label="Why is this amendment being withdrawn — required" value={wdWhy} onChange={e=>setWdWhy(e.target.value)} placeholder="Why is this amendment being withdrawn — required" style={{...inp,height:56,resize:"vertical",fontFamily:T.font,margin:0}}/>
+          {!wdWhy.trim()&&<div style={{fontSize:11,color:"#c2410c",marginTop:6}}>⚠ A reason is required — Withdraw stays disabled until you give one.</div>}
+          <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:14}}>
+            <button onClick={()=>setCbox(null)} style={{padding:"8px 18px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",color:T.text}}>Cancel</button>
+            <button disabled={!wdWhy.trim()} onClick={()=>{onActVl(r,"withdraw",wdWhy.trim());setCbox(null);}} style={{padding:"8px 18px",borderRadius:7,border:"none",background:wdWhy.trim()?T.err:"#94a3b8",color:"#fff",fontSize:12,fontWeight:700,cursor:wdWhy.trim()?"pointer":"not-allowed"}}>Withdraw — return to V{r.fromVer}</button>
+          </div></div></div>;}
       if(cbox.kind==="lockOp")return box("alert",T.err,"Link and lock this operation code?",<>Operation code <strong>{cscmOpCode}</strong> will be linked to this package PERMANENTLY. It cannot be changed afterwards — not on this version and not on any later one, because it is the join between CliniPack and PrimeCare.</>,null,"Link & lock",T.err,doStage12);
       if(cbox.kind==="lockPkg")return box("alert",T.err,"Link and lock this PKGID?",<>PKGID <strong>{pkgId}</strong> will be linked to this package PERMANENTLY and cannot be changed afterwards, on this version or any later one.</>,null,"Link & lock",T.err,doStage13);
       if(cbox.kind==="finalise")return box("alert",T.warn,"Finalise this package?",<>Acknowledging closes {p.id} as approved for version {p.version||1}. Its certificate is then issued and emailed to the configured recipients. It cannot be undone from here.</>,null,"Acknowledge & finalise",T.primaryDark||T.primary,()=>{onAction(p,"acknowledge",{actionLabel:"CFO Acknowledgement — acknowledged; package approved",comment:comments});setComments("");});
@@ -1720,6 +1798,6 @@ function ProcDetail({proc:p,role,me,onBack,onAction,canAct,nav,categories=MASTER
       </div>
     </ActionModal>
 
-    <DelegateModal isOpen={showDelegateModal} onClose={()=>setShowDelegateModal(false)} stageName={stageDef?.label||""} delegateRole={stageDef?.delegateTo||""} onSubmit={(delegate,comment)=>{onAction(p,"delegate",{actionLabel:`Forwarded to ${delegate.name}${comment?": "+comment:""}`,delegate,delegateRole:stageDef.delegateTo,delegateComment:comment});setShowDelegateModal(false);}}/>
+    <DelegateModal isOpen={showDelegateModal} onClose={()=>setShowDelegateModal(false)} stageName={stageDef?.label||""} delegateRole={stageDef?.delegateTo||""} procId={p.id} branchName={p.branchName||(p.branch==="NTH"?"North Hospital":"Central Hospital")} onSubmit={(delegate,comment)=>{onAction(p,"delegate",{actionLabel:`Forwarded to ${delegate.name}${comment?": "+comment:""}`,delegate,delegateRole:stageDef.delegateTo,delegateComment:comment});setShowDelegateModal(false);}}/>
   </div>;
 }
